@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   linkBtn.addEventListener('click', () => {
     const code = codeInput.value.trim();
-    if (code.length === 8) {
+    if (code.length > 0) {
       chrome.storage.local.set({ parentId: code }, () => {
         errorMsg.style.display = 'none';
         successMsg.style.display = 'block';
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1500);
       });
     } else {
-      errorMsg.textContent = "Code must be exactly 8 characters.";
+      errorMsg.textContent = "Please enter a valid code.";
       errorMsg.style.display = 'block';
     }
   });

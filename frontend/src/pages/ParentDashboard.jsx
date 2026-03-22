@@ -135,7 +135,7 @@ export default function ParentDashboard() {
         }
       );
 
-      const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'));
+      const qActivity = query(collection(db, 'activity'), where('parentId', '==', currentUser.uid), orderBy('timestamp', 'desc'));
       unsubActivity = onSnapshot(qActivity, 
         (snap) => {
           setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -296,19 +296,19 @@ export default function ParentDashboard() {
       (Date.now() - new Date(a.timestamp).getTime()) < 24 * 60 * 60 * 1000
     );
 
-    const extensionCode = currentUser ? currentUser.uid.substring(0, 8).toUpperCase() : '';
+    const extensionCode = currentUser ? currentUser.uid : '';
 
     return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
       <div style={{ background: '#EEF2FF', border: '2px dashed #818CF8', padding: '24px', borderRadius: '12px', marginBottom: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
         <h3 style={{ color: '#312E81', marginBottom: '8px', fontSize: '20px' }}>🔌 Link Your Extension</h3>
         <p style={{ color: '#4F46E5', marginBottom: '16px' }}>Enter this code in the SafeWeb Jr Chrome extension to link it to your account</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '12px 24px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
-          <span style={{ fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', color: '#1E1B4B' }}>{extensionCode}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '12px 24px', borderRadius: '8px', border: '1px solid #C7D2FE', wordBreak: 'break-all', maxWidth: '100%' }}>
+          <span style={{ fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px', color: '#1E1B4B' }}>{extensionCode}</span>
           <button 
             onClick={() => { navigator.clipboard.writeText(extensionCode); showToast("Code copied!"); }} 
             style={{ background: '#4F46E5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-            Copy
+            Copy Full Code
           </button>
         </div>
       </div>
