@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { 
   collection, addDoc, query, orderBy, onSnapshot, 
-  updateDoc, doc, deleteDoc, setDoc 
+  updateDoc, doc, deleteDoc, setDoc, limit, getDocs
 } from 'firebase/firestore';
 import './ParentDashboard.css';
 
@@ -89,6 +89,12 @@ export default function ParentDashboard() {
   const [activities, setActivities] = useState([]);
   const [recommendedSites, setRecommendedSites] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Report States
+  const [summary, setSummary] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [reportStats, setReportStats] = useState(null);
+  const [lastGenerated, setLastGenerated] = useState(null);
 
   // Form States
   const [showChildModal, setShowChildModal] = useState(false);
@@ -602,19 +608,92 @@ export default function ParentDashboard() {
     </motion.div>
   );
 
+  const handleGenerateSummary = async () => {
+    setIsGenerating(true);
+    try {
+      const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'), limit(200));
+      const snap = await getDocs(qActivity);
+      const acts = snap.docs.map(d => d.data());
+      
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentActs = acts.filter(a => {
+        const d = new Date(a.timestamp);
+        return d >= sevenDaysAgo;
+      });
+
+      const childName = children.length > 0 ? children[0].name : "your child";
+
+      const res = await fetch('http://localhost:5000/api/reports/generate-summary', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           activityData: recentActs,
+           childName,
+           weekStart: sevenDaysAgo.toDateString()
+         })
+      });
+      const data = await res.json();
+      
+      if (data.summary) {
+        setSummary(data.summary);
+        setReportStats(data.stats);
+        setLastGenerated(new Date());
+      }
+    } catch(e) {
+      console.error(e);
+      showToast("Error generating summary");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const renderReports = () => (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
-      <div className="card report-card text-center py-12">
-        <div className="report-icon mb-4"><FiMail style={{fontSize: '48px', color: 'var(--indigo)'}}/></div>
-        <h2 className="mb-2">AI Weekly Summary</h2>
-        <p className="text-muted mb-6">Coming Soon! SafeWeb Jr will analyze your child's browsing habits and send you an intelligent summary every week.</p>
-        
-        <div className="toggle-container mx-auto" style={{maxWidth: '300px'}}>
-          <label className="flex items-center justify-between pointer p-3 border rounded">
-            <span>Enable Weekly Emails</span>
-            <input type="checkbox" className="toggle-checkbox" disabled checked/>
-          </label>
+      <div className="card report-card py-8 px-8">
+        <div className="flex justify-between items-center mb-6" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+          <div>
+            <h2 className="text-2xl font-bold" style={{color: '#4F46E5', fontSize: '24px', margin: 0, fontWeight: 'bold'}}>📊 AI Weekly Summary</h2>
+            <p className="text-muted" style={{margin: '4px 0 0 0'}}>Powered by Claude AI</p>
+          </div>
+          <button 
+            className="btn-primary" 
+            onClick={handleGenerateSummary} 
+            disabled={isGenerating}
+            style={{background: '#4F46E5', opacity: isGenerating ? 0.7 : 1}}
+          >
+            {isGenerating ? '🤖 Generating...' : 'Generate Summary'}
+          </button>
         </div>
+
+        {summary ? (
+          <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="summary-result-card" style={{background: '#EEF2FF', padding: '24px', borderRadius: '16px'}}>
+            <div className="summary-stats flex justify-between mb-4 pb-4 border-b border-indigo-200" style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #C7D2FE', paddingBottom: '16px', marginBottom: '16px'}}>
+               <div>
+                 <strong className="text-indigo-900" style={{color: '#312E81'}}>{reportStats?.siteVisits || 0}</strong> sites visited <span className="mx-2 text-indigo-300" style={{color: '#A5B4FC', margin: '0 8px'}}>|</span> 
+                 <strong className="text-indigo-900" style={{color: '#312E81'}}>{reportStats?.flagged || 0}</strong> flagged <span className="mx-2 text-indigo-300" style={{color: '#A5B4FC', margin: '0 8px'}}>|</span> 
+                 <strong className="text-indigo-900" style={{color: '#312E81'}}>{reportStats?.blocked || 0}</strong> blocked
+                 <span className="mx-2 text-indigo-300" style={{color: '#A5B4FC', margin: '0 8px'}}>|</span>
+                 <strong className="text-indigo-900" style={{color: '#312E81'}}>{reportStats?.panics || 0}</strong> panics
+               </div>
+               <span className="text-sm text-indigo-400" style={{color: '#818CF8', fontSize: '14px'}}>Generated {lastGenerated ? getTimeAgo(lastGenerated) : 'just now'}</span>
+            </div>
+            
+            <div className="summary-text text-indigo-900" style={{lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#312E81', fontSize: '16px'}}>
+              {summary}
+            </div>
+
+            <div className="flex gap-4 mt-6" style={{display: 'flex', gap: '16px', marginTop: '24px'}}>
+              <button className="btn-outline flex-1" style={{flex: 1, color: '#4F46E5', borderColor: '#4F46E5', background: 'transparent'}} onClick={handleGenerateSummary} disabled={isGenerating}>🔄 Regenerate</button>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-xl border-dashed border-2 border-gray-200" style={{textAlign: 'center', padding: '48px 0', background: '#F9FAFB', borderRadius: '12px', border: '2px dashed #E5E7EB'}}>
+             <FiMail style={{fontSize: '48px', color: '#9CA3AF', margin: '0 auto 16px'}}/>
+             <p className="text-gray-500 font-medium" style={{color: '#6B7280', fontWeight: 'bold'}}>Click generate to let AI analyze this week's web activity.</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );
