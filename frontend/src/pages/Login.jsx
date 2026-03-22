@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiShield } from 'react-icons/fi';
+import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
@@ -28,13 +29,18 @@ export default function Login() {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <motion.div 
+        className="auth-card"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div className="auth-header">
           <Link to="/" className="auth-logo">
             <FiShield />
             <span>SafeWeb Jr</span>
           </Link>
-          <h2>Welcome Back</h2>
+          <h2>Welcome back</h2>
           <p>Login to your parent dashboard</p>
         </div>
 
@@ -62,14 +68,21 @@ export default function Login() {
             />
           </div>
           <button disabled={loading} type="submit" className="auth-btn">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? (
+              <div className="spinner-container">
+                <svg className="spinner" viewBox="0 0 50 50">
+                  <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="5"></circle>
+                </svg>
+                Logging in...
+              </div>
+            ) : 'Login'}
           </button>
         </form>
 
         <div className="auth-footer">
           Don't have an account? <Link to="/signup" className="auth-link">Sign up</Link>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

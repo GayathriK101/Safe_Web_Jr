@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiShield } from 'react-icons/fi';
+import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
@@ -17,6 +18,10 @@ export default function Signup() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    if (password.length < 8) {
+      return setError('Password must be at least 8 characters');
+    }
 
     if (password !== confirmPassword) {
       return setError('Passwords do not match');
@@ -36,13 +41,18 @@ export default function Signup() {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <motion.div 
+        className="auth-card"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div className="auth-header">
           <Link to="/" className="auth-logo">
             <FiShield />
             <span>SafeWeb Jr</span>
           </Link>
-          <h2>Create Account</h2>
+          <h2>Create your account</h2>
           <p>Start protecting your child today</p>
         </div>
 
@@ -90,14 +100,21 @@ export default function Signup() {
             />
           </div>
           <button disabled={loading} type="submit" className="auth-btn">
-            {loading ? 'Signing up...' : 'Sign Up'}
+            {loading ? (
+              <div className="spinner-container">
+                <svg className="spinner" viewBox="0 0 50 50">
+                  <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="5"></circle>
+                </svg>
+                Signing up...
+              </div>
+            ) : 'Sign Up'}
           </button>
         </form>
 
         <div className="auth-footer">
           Already have an account? <Link to="/login" className="auth-link">Log in</Link>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
