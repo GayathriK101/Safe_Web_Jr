@@ -2,28 +2,137 @@
 console.log("SafeWeb Jr scanning: " + window.location.href);
 
 const BLOCKED_DOMAINS = [
-  // Adult content
-  "pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com", "onlyfans.com", 
-  "redtube.com", "youporn.com", "tube8.com", "brazzers.com", "bangbros.com", 
-  "chaturbate.com", "livejasmin.com", "stripchat.com", "cam4.com", 
-  "myfreecams.com", "adultfriendfinder.com", "ashleymadison.com", "eporner.com",
-  "spankbang.com", "beeg.com", "xhamsterlive.com", "bongacams.com", "camsoda.com",
-  "jerkmate.com", "hqporner.com", "motherless.com", "tnaflix.com", "tubecup.com",
-  "kink.com", "faketaxi.com",
-  // Gore/violence
-  "liveleak.com", "bestgore.com", "goregrish.com", "theync.com", "crazyshit.com",
-  "kaotic.com", "gorethread.com", "goretube.com"
+  // Major adult video sites
+  "pornhub.com", "xvideos.com", "xnxx.com", 
+  "xhamster.com", "redtube.com", "youporn.com",
+  "tube8.com", "eporner.com", "spankbang.com",
+  "beeg.com", "hqporner.com", "tnaflix.com",
+  "tubecup.com", "txxx.com", "vjav.com",
+  "javhd.com", "javmost.com", "porntrex.com",
+  "cliphunter.com", "empflix.com", "faphouse.com",
+  "porndig.com", "porndoe.com", "pornone.com",
+  "bravotube.net", "hdporn.net", "porn.com",
+  "sex.com", "pornmd.com", "fuqer.com",
+  "4tube.com", "5star.porn", "91porn.com",
+  
+  // Premium adult studios
+  "brazzers.com", "bangbros.com", "realitykings.com",
+  "mofos.com", "twistys.com", "nubiles.net",
+  "digitalplayground.com", "kink.com", "faketaxi.com",
+  "fakehub.com", "passion-hd.com", "babes.com",
+  "wicked.com", "penthouse.com", "hustler.com",
+  "playboy.com", "playboyplus.com",
+  
+  // Live cam sites
+  "chaturbate.com", "livejasmin.com", "stripchat.com",
+  "cam4.com", "myfreecams.com", "bongacams.com",
+  "camsoda.com", "jerkmate.com", "streamate.com",
+  "imlive.com", "flirt4free.com", "liveprivates.com",
+  "cams.com", "amateur.tv", "camplace.com",
+  
+  // Dating and hookup sites
+  "adultfriendfinder.com", "ashleymadison.com",
+  "fling.com", "alt.com", "benaughty.com",
+  "gleeden.com", "victoriamilan.com", "snap sexting",
+  
+  // Hentai and anime adult
+  "nhentai.net", "hentaihaven.xxx", "rule34.xxx",
+  "rule34.paheal.net", "e621.net", "gelbooru.com",
+  "danbooru.donmai.us", "sankakucomplex.com",
+  "fakku.net", "hentai2read.com", "luscious.net",
+  "hentaifox.com", "imhentai.xxx",
+  
+  // OnlyFans and similar
+  "onlyfans.com", "fapello.com", "thothub.to",
+  "simpcity.su", "coomer.party", "kemono.party",
+  "fansly.com", "manyvids.com", "clips4sale.com",
+  "iwantclips.com", "niteflirt.com",
+  
+  // Gore and shock sites  
+  "liveleak.com", "bestgore.com", "goregrish.com",
+  "theync.com", "crazyshit.com", "kaotic.com",
+  "gorethread.com", "ogrish.com", "rotten.com",
+  "watchpeopledie.tv", "uncoverreality.com",
+  
+  // Escort sites
+  "backpage.com", "skipthegames.com", "eroticmonkey.ch",
+  "slixa.com", "tryst.link", "preferred411.com",
+  
+  // Other adult
+  "xart.com", "hegre.com", "femjoy.com",
+  "met-art.com", "watch-my-gf.com", "homemoviestube.com",
+  "motherless.com", "heavy-r.com", "drtuber.com",
+  "nuvid.com", "gotporn.com", "perverzija.com"
 ];
 
 const BAD_WORDS = [
-  // Sexual / Explicit
-  "porn", "xxx", "nsfw", "sex", "nude", "naked", "erotica", "fetish",
-  // Violence / Gore
-  "gore", "behead", "murder", "suicide", "kill", "blood", "massacre", "torture",
-  // Drugs
-  "cocaine", "heroin", "meth", "fentanyl", "lsd", "mdma", "opium", "narcotics",
-  // Hate Speech
-  "nazi", "supremacist", "slur", "bigot", "racist"
+  // Direct explicit terms
+  "porn", "porno", "pornography", "xxx", "x-rated",
+  "nsfw", "adult content", "explicit content",
+  
+  // Sexual acts and terms
+  "sex", "sexual", "intercourse", "masturbate", 
+  "masturbation", "orgasm", "erection", "ejaculate",
+  "blowjob", "handjob", "fingering", "cunnilingus",
+  "fellatio", "anal", "threesome", "orgy", "gangbang",
+  "creampie", "squirt", "climax", "foreplay",
+  
+  // Body parts used explicitly  
+  "penis", "vagina", "vulva", "clitoris", "testicles",
+  "boobs", "boob", "breasts", "nipple", "nipples",
+  "naked", "nude", "nudes", "nudity", "topless",
+  "bottomless", "genitals", "privates", "dick",
+  "cock", "pussy", "ass", "butt naked", "bare",
+  
+  // Search terms kids use
+  "naked girls", "naked boys", "naked women", "naked men",
+  "nude girls", "nude boys", "hot naked", "sexy naked",
+  "nude photos", "naked photos", "sex video", "sex tape",
+  "leaked nudes", "leaked photos", "onlyfans leaked",
+  
+  // Soft explicit terms
+  "erotic", "erotica", "seductive", "sensual",
+  "sexy", "naughty", "kinky", "horny", "aroused",
+  "strip", "stripper", "stripping", "lap dance",
+  "escort", "prostitute", "prostitution", "hookup",
+  "one night stand", "friends with benefits",
+  "sexting", "sext", "dirty pics", "dirty photos",
+  
+  // Adult platforms and content types
+  "onlyfans", "hentai", "anime porn", "rule34",
+  "doujin", "ecchi", "lemon fanfic", "smut",
+  "fanfiction sex", "wattpad sex", "ao3 explicit",
+  
+  // Violence and gore
+  "gore", "gory", "beheading", "decapitation",
+  "murder video", "death video", "brutal killing",
+  "graphic violence", "live death", "liveleak",
+  "bestgore", "shock site", "snuff", "torture video",
+  "execution video", "stabbing video", "shooting video",
+  
+  // Self harm
+  "how to kill myself", "how to commit suicide",
+  "suicide methods", "painless death", "self harm",
+  "cutting myself", "how to cut", "want to die",
+  "end my life", "kill myself",
+  
+  // Drugs and substances
+  "cocaine", "heroin", "meth", "methamphetamine",
+  "fentanyl", "lsd", "mdma", "ecstasy", "molly",
+  "opium", "crack", "crystal meth", "buy drugs",
+  "buy weed", "buy marijuana", "how to get high",
+  "drug dealer", "get stoned", "smoke weed",
+  "roll a joint", "bong", "drug high",
+  
+  // Hate speech
+  "nazi", "white supremacist", "kkk", "hate speech",
+  "racial slur", "ethnic cleansing", "genocide",
+  
+  // Grooming related
+  "send me pics", "send nudes", "show me your body",
+  "are you alone", "dont tell your parents",
+  "our little secret", "special friend",
+  "meet in person", "come to my house"
 ];
 
 const hostname = window.location.hostname.replace('www.', '').toLowerCase();
