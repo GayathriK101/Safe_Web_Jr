@@ -123,45 +123,53 @@ export default function ParentDashboard() {
     }, 5000);
 
     try {
-      const qChildren = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
-      unsubChildren = onSnapshot(qChildren, 
-        (snap) => {
-          setChildren(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        },
-        (err) => {
-          console.error("Error fetching children:", err);
-          setError("Failed to load children data.");
-          setLoading(false);
-        }
-      );
+      try {
+        const qChildren = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
+        unsubChildren = onSnapshot(qChildren, 
+          (snap) => {
+            setChildren(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          },
+          (err) => {
+            console.error("Firestore Error (fetching children):", err.message || err, err);
+            setLoading(false);
+          }
+        );
+      } catch (e) {
+        console.error("Try/Catch Error (children query):", e.message || e);
+      }
 
-      const qActivity = query(collection(db, 'activity'), where('parentId', '==', currentUser.uid), orderBy('timestamp', 'desc'));
-      unsubActivity = onSnapshot(qActivity, 
-        (snap) => {
-          setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-          setLoading(false);
-        },
-        (err) => {
-          console.error("Error fetching activity:", err);
-          setError("Failed to load activity data.");
-          setLoading(false);
-        }
-      );
+      try {
+        const qActivity = query(collection(db, 'activity'), orderBy("timestamp", "desc"), limit(50));
+        unsubActivity = onSnapshot(qActivity, 
+          (snap) => {
+            setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setLoading(false);
+          },
+          (err) => {
+            console.error("Firestore Error (fetching activity):", err.message || err, err);
+            setLoading(false);
+          }
+        );
+      } catch (e) {
+        console.error("Try/Catch Error (activity query):", e.message || e);
+      }
 
-      const qRec = query(collection(db, `users/${currentUser.uid}/recommendedSites`));
-      unsubRec = onSnapshot(qRec, 
-        (snap) => {
-          setRecommendedSites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        },
-        (err) => {
-          console.error("Error fetching recommended sites:", err);
-          setError("Failed to load recommended sites.");
-          setLoading(false);
-        }
-      );
+      try {
+        const qRec = query(collection(db, `users/${currentUser.uid}/recommendedSites`));
+        unsubRec = onSnapshot(qRec, 
+          (snap) => {
+            setRecommendedSites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          },
+          (err) => {
+            console.error("Firestore Error (fetching recommended sites):", err.message || err, err);
+            setLoading(false);
+          }
+        );
+      } catch (e) {
+        console.error("Try/Catch Error (recommended sites query):", e.message || e);
+      }
     } catch (err) {
-      console.error("Error setting up listeners:", err);
-      setError("Failed to set up data listeners.");
+      console.error("Firestore Setup Error:", err.message || err, err);
       setLoading(false);
     }
 
