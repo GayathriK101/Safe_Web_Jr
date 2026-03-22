@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiShield, FiClock, FiMoon, FiStar, FiBarChart2, FiAlertCircle } from 'react-icons/fi';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import './Landing.css';
 
 export default function Landing() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const features = [
     { title: "Real-time Content Scanning", icon: <FiShield />, desc: "Instantly detect and block inappropriate content before it's displayed." },
     { title: "Screen Time Control", icon: <FiClock />, desc: "Set daily limits and easily manage when your kids can access the web." },
@@ -28,6 +30,7 @@ export default function Landing() {
           <span>SafeWeb Jr</span>
         </div>
         <div className="nav-actions">
+          <button className="btn btn-outline" style={{padding: '0.4rem 1rem', fontSize: '0.9rem'}} onClick={() => setIsModalOpen(true)}>📦 Get Extension</button>
           <Link to="/login" className="btn btn-outline">Login</Link>
           <Link to="/signup" className="btn btn-primary">Get Started</Link>
         </div>
@@ -45,8 +48,9 @@ export default function Landing() {
           <p>
             SafeWeb Jr monitors, protects and guides your child's internet experience — while keeping them informed and motivated.
           </p>
-          <div className="hero-actions">
+          <div className="hero-actions" style={{display: 'flex', gap: '1rem', justifyContent: 'center'}}>
             <Link to="/signup" className="btn btn-primary btn-large">Get Started Free</Link>
+            <button className="btn btn-outline btn-large" onClick={() => setIsModalOpen(true)}>Get Extension</button>
           </div>
         </div>
       </header>
@@ -86,6 +90,43 @@ export default function Landing() {
           <p>&copy; 2025 SafeWeb Jr. All rights reserved.</p>
         </div>
       </footer>
+
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div 
+            initial={{opacity: 0}} 
+            animate={{opacity: 1}} 
+            exit={{opacity: 0}} 
+            className="modal-backdrop"
+            onClick={() => setIsModalOpen(false)}
+          >
+            <motion.div 
+               initial={{scale: 0.95, y: 20}} 
+               animate={{scale: 1, y: 0}} 
+               exit={{scale: 0.95, y: 20}} 
+               className="modal-content"
+               onClick={e => e.stopPropagation()}
+            >
+               <h2>Install SafeWeb Jr Extension</h2>
+               <p className="modal-subtitle">Follow these simple steps</p>
+               
+               <div className="steps-list">
+                 <div className="step-item"><span className="step-badge">1</span> Click the download button below to get the extension files</div>
+                 <div className="step-item"><span className="step-badge">2</span> Unzip the downloaded folder</div>
+                 <div className="step-item"><span className="step-badge">3</span> Open Chrome and go to <strong>chrome://extensions</strong></div>
+                 <div className="step-item"><span className="step-badge">4</span> Enable Developer Mode (toggle in top right)</div>
+                 <div className="step-item"><span className="step-badge">5</span> Click Load Unpacked and select the unzipped folder</div>
+                 <div className="step-item"><span className="step-badge">6</span> SafeWeb Jr is now protecting your child! 🛡️</div>
+               </div>
+
+               <div className="modal-actions">
+                 <a href="/extension.zip" download className="btn btn-primary btn-large" style={{width: '100%', marginBottom: '0.5rem'}}>Download Extension</a>
+                 <button className="btn btn-outline" style={{width: '100%'}} onClick={() => setIsModalOpen(false)}>Close</button>
+               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
