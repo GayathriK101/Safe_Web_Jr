@@ -442,13 +442,13 @@ export default function ParentDashboard() {
         ) : (
           <div className="alerts-grid">
             {alerts.slice(0, 20).map((a, i) => (
-              <div key={i} className={`alert-card card ${a.type === 'PANIC' ? 'border-red alert-urgent' : ''}`}>
+              <div key={i} className={`alert-card card ${a.type === 'PANIC' ? 'border-red alert-urgent' : ''}`} style={a.type === 'PANIC' ? { borderColor: '#EF4444', borderWidth: '2px' } : {}}>
                 <div className="alert-header">
                   <span className={`badge ${getActivityColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
                   <span className="alert-time">{getTimeAgo(a.timestamp)}</span>
                 </div>
-                {a.type === 'PANIC' && <span className="urgent-badge">URGENT</span>}
-                <p className="alert-detail">{a.domain || a.query || a.url || 'Unknown Action'}</p>
+                {a.type === 'PANIC' && <span className="urgent-badge" style={{color: '#EF4444', fontWeight: 'bold'}}>🚨 URGENT</span>}
+                <p className="alert-detail">{a.type === 'PANIC' ? 'Child pressed panic button from dashboard' : (a.domain || a.query || a.url || 'Unknown Action')}</p>
                 <div className="alert-footer">
                   <span>{formatDate(a.timestamp)} at {formatTime(a.timestamp)}</span>
                 </div>
@@ -686,8 +686,11 @@ export default function ParentDashboard() {
             </button>
             <h1 className="current-tab-title">{TABS.find(t => t.id === activeTab)?.label}</h1>
           </div>
-          <div className="nav-right">
+          <div className="nav-right" style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
             <span className="parent-greeting">Hi, {currentUser?.name || 'Parent'}</span>
+            <button className="btn-outline" style={{padding: '8px 16px', borderRadius: '8px', color: '#4F46E5', border: '2px solid #4F46E5', background: 'transparent', fontWeight: 'bold', cursor: 'pointer'}} onClick={() => navigate('/kid/dashboard')}>
+              👦 Kid View
+            </button>
             <button className="btn-logout" onClick={handleLogout} title="Logout">
               <FiLogOut />
             </button>

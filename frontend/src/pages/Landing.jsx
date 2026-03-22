@@ -16,7 +16,7 @@ export default function Landing() {
   const steps = [
     { title: "Parent Setup", desc: "Sign up and configure settings for your child's profile." },
     { title: "Install Extension", desc: "Add the SafeWeb Jr Chrome extension to your child's browser." },
-    { title: "Monitor & Protect", desc: "Both parent and child get their own dashboard to stay informed." }
+    { title: "Monitor & Protect", desc: "Parents can switch to Kid View to see what their child sees" }
   ];
 
   return (
