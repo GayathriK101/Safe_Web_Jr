@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { 
   collection, query, orderBy, onSnapshot, getDocs,
-  updateDoc, doc, addDoc, setDoc, serverTimestamp, increment
+  updateDoc, doc, addDoc, setDoc, serverTimestamp, increment, where
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiLogOut } from 'react-icons/fi';
@@ -43,7 +43,7 @@ export default function KidDashboard() {
     });
 
     // Load recommended sites from settings
-    const unsubRec = onSnapshot(doc(db, 'settings', 'placeholder'), (docSnapshot) => {
+    const unsubRec = onSnapshot(doc(db, 'settings', currentUser.uid), (docSnapshot) => {
       if (docSnapshot.exists()) {
         const data = docSnapshot.data();
         setRecommendedSites(data.recommendedSites || []);
@@ -53,7 +53,7 @@ export default function KidDashboard() {
     // Load Activity for Points (Current Day)
     const today = new Date();
     today.setHours(0,0,0,0);
-    const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'));
+    const qActivity = query(collection(db, 'activity'), where('parentId', '==', currentUser.uid), orderBy('timestamp', 'desc'));
     const unsubActivity = onSnapshot(qActivity, (snap) => {
       setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });

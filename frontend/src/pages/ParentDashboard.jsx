@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { 
   collection, addDoc, query, orderBy, onSnapshot, 
-  updateDoc, doc, deleteDoc, setDoc, limit, getDocs
+  updateDoc, doc, deleteDoc, setDoc, limit, getDocs, where
 } from 'firebase/firestore';
 import './ParentDashboard.css';
 
@@ -90,6 +90,7 @@ export default function ParentDashboard() {
   const [activities, setActivities] = useState([]);
   const [recommendedSites, setRecommendedSites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Report States
   const [summary, setSummary] = useState("");
@@ -111,24 +112,65 @@ export default function ParentDashboard() {
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
+    setError(null);
 
-    const qChildren = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
-    const unsubChildren = onSnapshot(qChildren, (snap) => {
-      setChildren(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    let unsubChildren = () => {};
+    let unsubActivity = () => {};
+    let unsubRec = () => {};
 
-    const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'));
-    const unsubActivity = onSnapshot(qActivity, (snap) => {
-      setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const fallbackTimer = setTimeout(() => {
       setLoading(false);
-    });
+    }, 5000);
 
-    const qRec = query(collection(db, `users/${currentUser.uid}/recommendedSites`));
-    const unsubRec = onSnapshot(qRec, (snap) => {
-      setRecommendedSites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    try {
+      const qChildren = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
+      unsubChildren = onSnapshot(qChildren, 
+        (snap) => {
+          setChildren(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        },
+        (err) => {
+          console.error("Error fetching children:", err);
+          setError("Failed to load children data.");
+          setLoading(false);
+        }
+      );
 
-    return () => { unsubChildren(); unsubActivity(); unsubRec(); };
+      const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'));
+      unsubActivity = onSnapshot(qActivity, 
+        (snap) => {
+          setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          setLoading(false);
+        },
+        (err) => {
+          console.error("Error fetching activity:", err);
+          setError("Failed to load activity data.");
+          setLoading(false);
+        }
+      );
+
+      const qRec = query(collection(db, `users/${currentUser.uid}/recommendedSites`));
+      unsubRec = onSnapshot(qRec, 
+        (snap) => {
+          setRecommendedSites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        },
+        (err) => {
+          console.error("Error fetching recommended sites:", err);
+          setError("Failed to load recommended sites.");
+          setLoading(false);
+        }
+      );
+    } catch (err) {
+      console.error("Error setting up listeners:", err);
+      setError("Failed to set up data listeners.");
+      setLoading(false);
+    }
+
+    return () => { 
+      clearTimeout(fallbackTimer);
+      unsubChildren(); 
+      unsubActivity(); 
+      unsubRec(); 
+    };
   }, [currentUser]);
 
   const handleLogout = async () => {
@@ -192,7 +234,7 @@ export default function ParentDashboard() {
       });
       
       const newSites = [...recommendedSites, { url: newRecSiteUrl.trim(), name: newRecSiteName.trim() }];
-      await setDoc(doc(db, 'settings', 'placeholder'), {
+      await setDoc(doc(db, 'settings', currentUser.uid), {
         recommendedSites: newSites.map(s => s.url)
       }, { merge: true });
       showToast("Recommended site added! 🌐");
@@ -212,7 +254,7 @@ export default function ParentDashboard() {
       
       if (siteToDelete) {
         const newSites = recommendedSites.filter(s => s.id !== id);
-        await setDoc(doc(db, 'settings', 'placeholder'), {
+        await setDoc(doc(db, 'settings', currentUser.uid), {
           recommendedSites: newSites.map(s => s.url)
         }, { merge: true });
         showToast("Recommended site removed! 🗑️");
@@ -230,13 +272,13 @@ export default function ParentDashboard() {
       });
       
       if (field === 'screenTimeLimitMinutes') {
-        await setDoc(doc(db, 'settings', 'placeholder'), {
+        await setDoc(doc(db, 'settings', currentUser.uid), {
           screenTimeLimit: value
         }, { merge: true });
         showToast("Screen time limit updated! ⏱️");
       }
       if (field === 'bedtimeHour') {
-        await setDoc(doc(db, 'settings', 'placeholder'), {
+        await setDoc(doc(db, 'settings', currentUser.uid), {
           bedtimeHour: value,
           bedtimeEnabled: true
         }, { merge: true });
@@ -254,8 +296,23 @@ export default function ParentDashboard() {
       (Date.now() - new Date(a.timestamp).getTime()) < 24 * 60 * 60 * 1000
     );
 
+    const extensionCode = currentUser ? currentUser.uid.substring(0, 8).toUpperCase() : '';
+
     return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      <div style={{ background: '#EEF2FF', border: '2px dashed #818CF8', padding: '24px', borderRadius: '12px', marginBottom: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <h3 style={{ color: '#312E81', marginBottom: '8px', fontSize: '20px' }}>🔌 Link Your Extension</h3>
+        <p style={{ color: '#4F46E5', marginBottom: '16px' }}>Enter this code in the SafeWeb Jr Chrome extension to link it to your account</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '12px 24px', borderRadius: '8px', border: '1px solid #C7D2FE' }}>
+          <span style={{ fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', color: '#1E1B4B' }}>{extensionCode}</span>
+          <button 
+            onClick={() => { navigator.clipboard.writeText(extensionCode); showToast("Code copied!"); }} 
+            style={{ background: '#4F46E5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            Copy
+          </button>
+        </div>
+      </div>
+
       {recentTamper && !dismissTamper && (
         <div style={{ background: '#FFFBEB', borderLeft: '4px solid #F59E0B', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
            <div>
@@ -632,7 +689,7 @@ export default function ParentDashboard() {
   const handleGenerateSummary = async () => {
     setIsGenerating(true);
     try {
-      const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'), limit(200));
+      const qActivity = query(collection(db, 'activity'), where('parentId', '==', currentUser.uid), orderBy('timestamp', 'desc'), limit(200));
       const snap = await getDocs(qActivity);
       const acts = snap.docs.map(d => d.data());
       
@@ -745,6 +802,16 @@ export default function ParentDashboard() {
            <div className="skeleton-box" style={{height: 120, flex: 1, borderRadius: 12}}></div>
            <div className="skeleton-box" style={{height: 120, flex: 1, borderRadius: 12}}></div>
          </div>
+       </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-dashboard">
+       <div className="p-main" style={{padding: '32px', textAlign: 'center'}}>
+         <h2 style={{color: '#EF4444'}}>Error Loading Dashboard</h2>
+         <p>{error}</p>
+         <button className="btn-primary mt-4" onClick={() => window.location.reload()}>Retry</button>
        </div>
     </div>
   );
