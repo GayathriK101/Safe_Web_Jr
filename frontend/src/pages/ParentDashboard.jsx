@@ -1,233 +1,744 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiShield } from 'react-icons/fi';
+import { 
+  FiHome, FiUsers, FiActivity, FiAlertTriangle, 
+  FiClock, FiMoon, FiGlobe, FiMail, FiShield, 
+  FiLogOut, FiMenu, FiX, FiSearch, FiPlus, FiTrash2,
+  FiCheckCircle, FiInfo
+} from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { 
+  collection, addDoc, query, orderBy, onSnapshot, 
+  updateDoc, doc, deleteDoc, setDoc 
+} from 'firebase/firestore';
 import './ParentDashboard.css';
 
 const AVATARS = ["🦁", "🐼", "🦊", "🐸", "🐯", "🐨"];
+
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: FiHome },
+  { id: 'children', label: 'Children', icon: FiUsers },
+  { id: 'activity', label: 'Activity History', icon: FiActivity },
+  { id: 'alerts', label: 'Alerts', icon: FiAlertTriangle },
+  { id: 'screentime', label: 'Screen Time', icon: FiClock },
+  { id: 'bedtime', label: 'Bedtime Mode', icon: FiMoon },
+  { id: 'recommended', label: 'Recommended Sites', icon: FiGlobe },
+  { id: 'reports', label: 'Reports', icon: FiMail },
+];
+
+function getTimeAgo(timestamp) {
+  if (!timestamp) return "Just now";
+  let date;
+  if (timestamp?.toDate) {
+    date = timestamp.toDate();
+  } else if (timestamp?.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (typeof timestamp === 'string') {
+    date = new Date(timestamp);
+  } else {
+    date = new Date(timestamp);
+  }
+  if (isNaN(date.getTime())) return "Just now";
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return seconds + " seconds ago";
+  if (seconds < 3600) return Math.floor(seconds/60) + " mins ago";
+  if (seconds < 86400) return Math.floor(seconds/3600) + " hours ago";
+  return Math.floor(seconds/86400) + " days ago";
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function getActivityColor(type) {
+  switch(type) {
+    case 'SITE_VISIT': return 'badge-green';
+    case 'CONTENT_FLAGGED': return 'badge-orange';
+    case 'SITE_BLOCKED': return 'badge-red';
+    case 'SEARCH_BLOCKED': return 'badge-red';
+    case 'PANIC': return 'badge-purple';
+    default: return 'badge-gray';
+  }
+}
 
 export default function ParentDashboard() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   
-  const [children, setChildren] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Modal state
+  const [toast, setToast] = useState('');
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  };
+  
+  // Data States
+  const [children, setChildren] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [recommendedSites, setRecommendedSites] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form States
+  const [showChildModal, setShowChildModal] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [newChildAge, setNewChildAge] = useState('');
   const [newChildAvatar, setNewChildAvatar] = useState(AVATARS[0]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  
+  const [newRecSiteName, setNewRecSiteName] = useState('');
+  const [newRecSiteUrl, setNewRecSiteUrl] = useState('');
+  const [newRecSiteCategory, setNewRecSiteCategory] = useState('Education');
 
   useEffect(() => {
-    fetchChildren();
+    if (!currentUser) return;
+    setLoading(true);
+
+    const qChildren = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
+    const unsubChildren = onSnapshot(qChildren, (snap) => {
+      setChildren(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const qActivity = query(collection(db, 'activity'), orderBy('timestamp', 'desc'));
+    const unsubActivity = onSnapshot(qActivity, (snap) => {
+      setActivities(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+
+    const qRec = query(collection(db, `users/${currentUser.uid}/recommendedSites`));
+    const unsubRec = onSnapshot(qRec, (snap) => {
+      setRecommendedSites(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { unsubChildren(); unsubActivity(); unsubRec(); };
   }, [currentUser]);
 
-  async function fetchChildren() {
-    if (!currentUser) return;
-    try {
-      setLoading(true);
-      const q = query(collection(db, `users/${currentUser.uid}/children`), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const childrenData = [];
-      querySnapshot.forEach((doc) => {
-        childrenData.push({ id: doc.id, ...doc.data() });
-      });
-      setChildren(childrenData);
-    } catch (err) {
-      console.error("Error fetching children:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleLogout() {
+  const handleLogout = async () => {
     try {
       await logout();
       navigate('/');
     } catch (err) {
       console.error("Failed to log out");
     }
-  }
+  };
 
-  function openModal() {
-    setError('');
-    setNewChildName('');
-    setNewChildAge('');
-    setNewChildAvatar(AVATARS[0]);
-    setShowModal(true);
-  }
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  async function handleAddChild(e) {
+  const todayActivities = useMemo(() => {
+    return activities.filter(a => a.timestamp >= todayStart.getTime());
+  }, [activities, todayStart]);
+
+  const stats = useMemo(() => {
+    return {
+      visited: todayActivities.filter(a => a.type === 'SITE_VISIT').length,
+      flags: todayActivities.filter(a => a.type === 'CONTENT_FLAGGED').length,
+      blocked: todayActivities.filter(a => ['SITE_BLOCKED', 'SEARCH_BLOCKED'].includes(a.type)).length,
+      points: children.reduce((sum, c) => sum + (c.points || 0), 0)
+    };
+  }, [todayActivities, children]);
+
+  // Handle Add Child
+  const handleAddChild = async (e) => {
     e.preventDefault();
-    if (!newChildName.trim()) return setError('Name is required');
-    const ageNum = parseInt(newChildAge);
-    if (!ageNum || ageNum < 3 || ageNum > 17) {
-      return setError('Age must be between 3 and 17');
-    }
-
+    if (!newChildName.trim() || !newChildAge) return;
     try {
-      setError('');
-      setSubmitting(true);
-      
-      const newChildData = {
+      await addDoc(collection(db, `users/${currentUser.uid}/children`), {
         name: newChildName.trim(),
-        age: ageNum,
+        age: parseInt(newChildAge),
         avatar: newChildAvatar,
         points: 0,
         bedtimeHour: 21,
         screenTimeLimitMinutes: 120,
+        screenTimeUsedMinutes: 0, // Mock usage
         createdAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, `users/${currentUser.uid}/children`), newChildData);
-      await fetchChildren();
-      setShowModal(false);
+      });
+      setShowChildModal(false);
+      setNewChildName('');
+      setNewChildAge('');
     } catch (err) {
-      console.error("Error adding child:", err);
-      setError('Failed to add child profile');
-    } finally {
-      setSubmitting(false);
+      console.error(err);
     }
-  }
+  };
 
-  return (
-    <div className="dashboard-container">
-      <nav className="dashboard-nav">
-        <Link to="/" className="logo" style={{ textDecoration: 'none' }}>
-          <FiShield className="logo-icon" />
-          <span>SafeWeb Jr</span>
-          <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginLeft: '1rem', fontWeight: 500 }}>Parent Dashboard</span>
-        </Link>
-        <div className="nav-user">
-          <span className="nav-username">{currentUser?.name || 'Parent'}</span>
-          <button onClick={handleLogout} className="btn btn-outline">Logout</button>
+  // Handle Recommended Site Add
+  const handleAddRecSite = async (e) => {
+    e.preventDefault();
+    if (!newRecSiteName.trim() || !newRecSiteUrl.trim()) return;
+    try {
+      await addDoc(collection(db, `users/${currentUser.uid}/recommendedSites`), {
+        name: newRecSiteName.trim(),
+        url: newRecSiteUrl.trim(),
+        category: newRecSiteCategory,
+        createdAt: new Date().toISOString()
+      });
+      
+      const newSites = [...recommendedSites, { url: newRecSiteUrl.trim(), name: newRecSiteName.trim() }];
+      await setDoc(doc(db, 'settings', 'placeholder'), {
+        recommendedSites: newSites.map(s => s.url)
+      }, { merge: true });
+      showToast("Recommended site added! 🌐");
+      
+      setNewRecSiteName('');
+      setNewRecSiteUrl('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Handle Recommended Site Delete
+  const handleDeleteRecSite = async (id) => {
+    try {
+      const siteToDelete = recommendedSites.find(s => s.id === id);
+      await deleteDoc(doc(db, `users/${currentUser.uid}/recommendedSites`, id));
+      
+      if (siteToDelete) {
+        const newSites = recommendedSites.filter(s => s.id !== id);
+        await setDoc(doc(db, 'settings', 'placeholder'), {
+          recommendedSites: newSites.map(s => s.url)
+        }, { merge: true });
+        showToast("Recommended site removed! 🗑️");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Handle Updates
+  const updateChildField = async (childId, field, value) => {
+    try {
+      await updateDoc(doc(db, `users/${currentUser.uid}/children`, childId), {
+        [field]: value
+      });
+      
+      if (field === 'screenTimeLimitMinutes') {
+        await setDoc(doc(db, 'settings', 'placeholder'), {
+          screenTimeLimit: value
+        }, { merge: true });
+        showToast("Screen time limit updated! ⏱️");
+      }
+      if (field === 'bedtimeHour') {
+        await setDoc(doc(db, 'settings', 'placeholder'), {
+          bedtimeHour: value,
+          bedtimeEnabled: true
+        }, { merge: true });
+        showToast("Bedtime updated! 🌙");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Render Functions for Tabs
+  const renderOverview = () => (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon emerald"><FiGlobe /></div>
+          <div className="stat-info">
+            <p className="stat-label">Sites Visited Today</p>
+            <h3 className="stat-value">{stats.visited}</h3>
+          </div>
         </div>
-      </nav>
-
-      <main className="dashboard-main">
-        <div className="dashboard-header">
-          <h1>Welcome, {currentUser?.name || 'Parent'}! 👋</h1>
-          <button onClick={openModal} className="btn btn-primary">+ Add Child</button>
+        <div className="stat-card">
+          <div className="stat-icon orange"><FiAlertTriangle /></div>
+          <div className="stat-info">
+            <p className="stat-label">Flags Raised Today</p>
+            <h3 className="stat-value">{stats.flags}</h3>
+          </div>
         </div>
+        <div className="stat-card">
+          <div className="stat-icon red"><FiShield /></div>
+          <div className="stat-info">
+            <p className="stat-label">Sites Blocked Today</p>
+            <h3 className="stat-value">{stats.blocked}</h3>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon indigo"><FiCheckCircle /></div>
+          <div className="stat-info">
+            <p className="stat-label">Total Points</p>
+            <h3 className="stat-value">{stats.points}</h3>
+          </div>
+        </div>
+      </div>
 
-        <section className="dashboard-content">
-          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', color: 'var(--text-color)' }}>Your Children</h2>
-          
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Loading children...</div>
-          ) : children.length === 0 ? (
-            <motion.div 
-              className="empty-state"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="empty-emoji">👶</div>
-              <p>No children added yet</p>
-              <button onClick={openModal} className="btn btn-primary">Add Your First Child</button>
-            </motion.div>
+      <div className="overview-split">
+        <div className="overview-feed card">
+          <h3 className="card-title">Recent Activity</h3>
+          {activities.length === 0 ? (
+            <div className="empty-state-small">
+              <span className="emoji">📝</span>
+              <p>No recent activity</p>
+            </div>
           ) : (
-            <div className="children-grid">
-              {children.map(child => (
-                <motion.div 
-                  key={child.id} 
-                  className="child-card"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                >
-                  <div className="child-card-header">
-                    <div className="child-avatar">{child.avatar}</div>
-                    <div className="child-info">
-                      <h3>{child.name}</h3>
-                      <p>Age {child.age}</p>
-                    </div>
+            <div className="feed-list">
+              {activities.slice(0, 10).map((act, i) => (
+                <div key={i} className="feed-item">
+                  <div className={`feed-dot ${getActivityColor(act.type)}`}></div>
+                  <div className="feed-content">
+                    <p className="feed-title">{act.domain || act.query || act.type}</p>
+                    <span className="feed-type {getActivityColor(act.type)}">{act.type.replace('_', ' ')}</span>
                   </div>
-                  <div className="child-stats">
-                    <div className="stat-row">⭐ {child.points} pts</div>
-                    <div className="stat-row">⏱ {child.screenTimeLimitMinutes} mins/day</div>
-                    <div className="stat-row">🌙 {child.bedtimeHour}:00</div>
-                  </div>
-                  <button className="btn btn-outline manage-btn">Manage</button>
-                </motion.div>
+                  <div className="feed-time">{getTimeAgo(act.timestamp)}</div>
+                </div>
               ))}
             </div>
           )}
-        </section>
-      </main>
+        </div>
 
-      <AnimatePresence>
-        {showModal && (
-          <motion.div 
-            className="modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={(e) => { if(e.target === e.currentTarget) setShowModal(false) }}
-          >
-            <motion.div 
-              className="modal-content"
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-            >
-              <h2>Add Child Profile</h2>
-              {error && <div className="error-message">{error}</div>}
-              <form onSubmit={handleAddChild}>
-                <div className="auth-form" style={{ marginBottom: '1.5rem' }}>
-                  <div className="form-group">
-                    <label>Name</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={newChildName}
-                      onChange={e => setNewChildName(e.target.value)}
-                      placeholder="e.g. Alex"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Age</label>
-                    <input 
-                      type="number" 
-                      required 
-                      min="3" max="17"
-                      value={newChildAge}
-                      onChange={e => setNewChildAge(e.target.value)}
-                      placeholder="e.g. 8"
-                    />
+        <div className="overview-children card">
+          <h3 className="card-title">Children Overview</h3>
+          {children.length === 0 ? (
+            <div className="empty-state-small">
+               <span className="emoji">👶</span>
+               <p>No children added yet</p>
+            </div>
+          ) : (
+            <div className="children-list">
+              {children.map(c => (
+                <div key={c.id} className="child-list-item">
+                  <span className="child-avatar-sm">{c.avatar}</span>
+                  <div className="child-info-sm">
+                    <h4>{c.name}</h4>
+                    <p>⭐ {c.points || 0} pts</p>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
 
-                <div className="form-group">
-                  <label style={{ marginBottom: '0.5rem', display: 'block' }}>Choose an Avatar</label>
-                  <div className="avatar-grid">
-                    {AVATARS.map(emoji => (
+  const renderChildren = () => (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      <div className="header-actions">
+        <h2>Manage Children</h2>
+        <button className="btn-primary" onClick={() => setShowChildModal(true)}>
+          <FiPlus /> Add Child
+        </button>
+      </div>
+      
+      {children.length === 0 ? (
+        <div className="empty-state-large">
+          <span className="emoji">🤸‍♀️</span>
+          <h3>No children added yet</h3>
+          <p>Add your child's profile to start monitoring and guiding their web usage.</p>
+          <button className="btn-primary" onClick={() => setShowChildModal(true)}>Add Your First Child</button>
+        </div>
+      ) : (
+        <div className="children-grid">
+          {children.map(c => (
+            <div key={c.id} className="child-card card">
+               <div className="child-avatar-lg">{c.avatar}</div>
+               <h3>{c.name}</h3>
+               <p className="child-age">Age {c.age}</p>
+               <div className="child-stats">
+                  <div><span>Points</span><strong>{c.points}</strong></div>
+                  <div><span>Screen Time</span><strong>{c.screenTimeLimitMinutes}m</strong></div>
+                  <div><span>Bedtime</span><strong>{c.bedtimeHour}:00</strong></div>
+               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+
+  const [actPage, setActPage] = useState(1);
+  const [actFilter, setActFilter] = useState('ALL');
+  
+  const renderActivity = () => {
+    const filtered = activities.filter(a => actFilter === 'ALL' || a.type === actFilter);
+    const paginated = filtered.slice((actPage-1)*20, actPage*20);
+    const totalPages = Math.ceil(filtered.length / 20) || 1;
+
+    return (
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+        <div className="card">
+          <div className="table-header">
+            <h3>All Activity</h3>
+            <select value={actFilter} onChange={e => {setActFilter(e.target.value); setActPage(1);}} className="input-select">
+              <option value="ALL">All Types</option>
+              <option value="SITE_VISIT">Visits</option>
+              <option value="CONTENT_FLAGGED">Flags</option>
+              <option value="SITE_BLOCKED">Blocks</option>
+              <option value="SEARCH_BLOCKED">Search Blocks</option>
+              <option value="PANIC">Panic</option>
+            </select>
+          </div>
+          
+          {filtered.length === 0 ? (
+            <div className="empty-state-large">
+              <span className="emoji">📭</span>
+              <h3>No activity found</h3>
+            </div>
+          ) : (
+            <>
+              <div className="table-responsive">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Detail (URL/Query)</th>
+                      <th>Time</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.map((a, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className={`badge ${getActivityColor(a.type)}`}>
+                            {a.type.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="truncate-cell" title={a.domain || a.query || a.url}>
+                          {a.domain || a.query || a.url || '-'}
+                        </td>
+                        <td>{formatTime(a.timestamp)}</td>
+                        <td>{formatDate(a.timestamp)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pagination">
+                <button disabled={actPage === 1} onClick={() => setActPage(p=>p-1)} className="btn-outline btn-sm">Prev</button>
+                <span>Page {actPage} of {totalPages}</span>
+                <button disabled={actPage === totalPages} onClick={() => setActPage(p=>p+1)} className="btn-outline btn-sm">Next</button>
+              </div>
+            </>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  const renderAlerts = () => {
+    const alerts = activities.filter(a => ['SITE_BLOCKED', 'SEARCH_BLOCKED', 'CONTENT_FLAGGED', 'PANIC'].includes(a.type));
+    
+    return (
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+        <h2 className="mb-4">🚨 Recent Alerts</h2>
+        {alerts.length === 0 ? (
+          <div className="empty-state-large card">
+            <span className="emoji">✅</span>
+            <h3>All clear!</h3>
+            <p>No alerts or blocked events recently.</p>
+          </div>
+        ) : (
+          <div className="alerts-grid">
+            {alerts.slice(0, 20).map((a, i) => (
+              <div key={i} className={`alert-card card ${a.type === 'PANIC' ? 'border-red alert-urgent' : ''}`}>
+                <div className="alert-header">
+                  <span className={`badge ${getActivityColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
+                  <span className="alert-time">{getTimeAgo(a.timestamp)}</span>
+                </div>
+                {a.type === 'PANIC' && <span className="urgent-badge">URGENT</span>}
+                <p className="alert-detail">{a.domain || a.query || a.url || 'Unknown Action'}</p>
+                <div className="alert-footer">
+                  <span>{formatDate(a.timestamp)} at {formatTime(a.timestamp)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    );
+  };
+
+  const renderScreenTime = () => {
+    const latestST = activities.find(a => a.type === 'SCREEN_TIME_UPDATE');
+    // Align with firestore structural requirements for totalMinutes
+    const totalMinutes = latestST ? latestST.totalMinutes || 0 : 0;
+            
+    return (
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+        <h2 className="mb-4">⏱ Screen Time Limits</h2>
+        {children.length === 0 ? (
+          <div className="empty-state-large card"><span className="emoji">👶</span><p>Add children to manage screen time.</p></div>
+        ) : (
+          <div className="screen-time-list">
+            {children.map(c => {
+              const screenTimeLimit = c.screenTimeLimitMinutes || 120;
+              const percent = Math.min((totalMinutes / screenTimeLimit) * 100, 100);
+              const isDanger = percent >= 80;
+              const isWarning = percent >= 60 && percent < 80;
+              const barColor = isDanger ? 'bg-red' : (isWarning ? 'bg-yellow' : 'bg-emerald');
+
+              return (
+                <div key={c.id} className="card st-card">
+                  <div className="st-header">
+                    <div className="flex-center gap-3">
+                      <span className="child-avatar-sm">{c.avatar}</span>
+                      <h3>{c.name}</h3>
+                    </div>
+                    <div className="st-edit">
+                      <label>Daily Limit (mins): </label>
+                      <input 
+                        type="number" 
+                        className="st-input" 
+                        value={screenTimeLimit} 
+                        onChange={e => updateChildField(c.id, 'screenTimeLimitMinutes', parseInt(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                  <div className="st-progress-container">
+                    <div className="st-progress-bar">
                       <div 
-                        key={emoji}
-                        className={`avatar-option ${newChildAvatar === emoji ? 'selected' : ''}`}
-                        onClick={() => setNewChildAvatar(emoji)}
-                      >
-                        {emoji}
-                      </div>
+                        className={`st-progress-fill ${barColor}`} 
+                        style={{ width: `${percent}%` }}
+                      ></div>
+                    </div>
+                    <div className="st-progress-labels">
+                      <span>{totalMinutes} mins used {percent >= 100 && <span className="badge badge-red ml-2">LIMIT REACHED</span>}</span>
+                      <span>{screenTimeLimit} mins limit</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
+    );
+  };
+
+  const renderBedtime = () => (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      <h2 className="mb-4">🌙 Bedtime Mode</h2>
+      {children.length === 0 ? (
+         <div className="empty-state-large card"><span className="emoji">😴</span><p>Add children to set bedtimes.</p></div>
+      ) : (
+        <div className="bedtime-grid">
+          {children.map(c => (
+            <div key={c.id} className="card bt-card">
+              <span className="child-avatar-lg">{c.avatar}</span>
+              <h3>{c.name}</h3>
+              <p className="text-muted">Internet will be blocked after this hour.</p>
+              <div className="form-group mt-3">
+                <label>Bedtime Hour (24h)</label>
+                <select 
+                  className="input-select w-full" 
+                  value={c.bedtimeHour || 21}
+                  onChange={(e) => updateChildField(c.id, 'bedtimeHour', parseInt(e.target.value))}
+                >
+                  {Array.from({length: 24}).map((_, i) => (
+                    <option key={i} value={i}>{i}:00 {i < 12 ? 'AM' : 'PM'}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+
+  const renderRecommendedSites = () => (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane flex-row gap-6">
+      <div className="card w-full max-w-md">
+        <h3 className="card-title">Add Recommended Site</h3>
+        <form onSubmit={handleAddRecSite} className="form-vertical">
+          <div className="form-group">
+            <label>Site Name</label>
+            <input required type="text" className="input-field" placeholder="e.g. Khan Academy" value={newRecSiteName} onChange={e=>setNewRecSiteName(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>URL</label>
+            <input required type="url" className="input-field" placeholder="https://..." value={newRecSiteUrl} onChange={e=>setNewRecSiteUrl(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Category</label>
+            <select className="input-select" value={newRecSiteCategory} onChange={e=>setNewRecSiteCategory(e.target.value)}>
+              <option>Education</option>
+              <option>Entertainment</option>
+              <option>Games</option>
+              <option>Art & Creativity</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <button type="submit" className="btn-primary w-full"><FiPlus /> Add Site</button>
+        </form>
+      </div>
+
+      <div className="card w-full flex-grow">
+        <h3 className="card-title">Current Recommended Sites</h3>
+        {recommendedSites.length === 0 ? (
+          <div className="empty-state-small mt-4">
+            <span className="emoji">🌐</span>
+            <p>No recommended sites yet</p>
+          </div>
+        ) : (
+          <div className="rec-list">
+            {recommendedSites.map(site => (
+              <div key={site.id} className="rec-item">
+                <div className="rec-info">
+                  <h4>{site.name}</h4>
+                  <a href={site.url} target="_blank" rel="noopener noreferrer">{site.url}</a>
+                  <span className="badge badge-indigo mt-1 inline-block">{site.category}</span>
+                </div>
+                <button title="Delete" className="btn-icon text-red" onClick={() => handleDeleteRecSite(site.id)}>
+                  <FiTrash2 />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+
+  const renderReports = () => (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      <div className="card report-card text-center py-12">
+        <div className="report-icon mb-4"><FiMail style={{fontSize: '48px', color: 'var(--indigo)'}}/></div>
+        <h2 className="mb-2">AI Weekly Summary</h2>
+        <p className="text-muted mb-6">Coming Soon! SafeWeb Jr will analyze your child's browsing habits and send you an intelligent summary every week.</p>
+        
+        <div className="toggle-container mx-auto" style={{maxWidth: '300px'}}>
+          <label className="flex items-center justify-between pointer p-3 border rounded">
+            <span>Enable Weekly Emails</span>
+            <input type="checkbox" className="toggle-checkbox" disabled checked/>
+          </label>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const getActiveView = () => {
+    switch(activeTab) {
+      case 'overview': return renderOverview();
+      case 'children': return renderChildren();
+      case 'activity': return renderActivity();
+      case 'alerts': return renderAlerts();
+      case 'screentime': return renderScreenTime();
+      case 'bedtime': return renderBedtime();
+      case 'recommended': return renderRecommendedSites();
+      case 'reports': return renderReports();
+      default: return renderOverview();
+    }
+  };
+
+  if (loading) return <div className="loading-screen">Loading SafeWeb Jr...</div>;
+
+  return (
+    <div className="p-dashboard">
+      
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{opacity:0, y:-50}} animate={{opacity:1, y:20}} exit={{opacity:0, y:-50}} className="toast-notification">
+             {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="mobile-overlay" onClick={() => setIsMobileMenuOpen(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <aside className={`p-sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+        <div className="p-sidebar-header">
+          <FiShield className="brand-icon" />
+          <span className="brand-text">SafeWeb Jr</span>
+          <button className="mobile-close" onClick={() => setIsMobileMenuOpen(false)}><FiX /></button>
+        </div>
+        
+        <nav className="p-sidebar-nav">
+          <p className="nav-label">MENU</p>
+          {TABS.map(tab => (
+            <button 
+              key={tab.id} 
+              className={`nav-item ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => { setActiveTab(tab.id); setIsMobileMenuOpen(false); }}
+            >
+              <tab.icon className="nav-item-icon" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Main Container */}
+      <div className="p-main">
+        {/* Top Navbar */}
+        <header className="p-top-nav">
+          <div className="nav-left">
+            <button className="mobile-toggle" onClick={() => setIsMobileMenuOpen(true)}>
+              <FiMenu />
+            </button>
+            <h1 className="current-tab-title">{TABS.find(t => t.id === activeTab)?.label}</h1>
+          </div>
+          <div className="nav-right">
+            <span className="parent-greeting">Hi, {currentUser?.name || 'Parent'}</span>
+            <button className="btn-logout" onClick={handleLogout} title="Logout">
+              <FiLogOut />
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Content */}
+        <main className="p-content-area">
+          <AnimatePresence mode="wait">
+            {getActiveView()}
+          </AnimatePresence>
+        </main>
+      </div>
+
+      {/* Modal for Add Child */}
+      <AnimatePresence>
+        {showChildModal && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowChildModal(false)}>
+            <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="modal-box">
+              <h2>Add Child Profile</h2>
+              <p className="text-muted mb-4">Create a profile to set distinct rules and monitoring.</p>
+              
+              <form onSubmit={handleAddChild}>
+                <div className="form-group">
+                  <label>Name</label>
+                  <input type="text" required value={newChildName} onChange={e=>setNewChildName(e.target.value)} className="input-field" placeholder="e.g. Maya"/>
+                </div>
+                <div className="form-group mb-4">
+                  <label>Age</label>
+                  <input type="number" required min="3" max="17" value={newChildAge} onChange={e=>setNewChildAge(e.target.value)} className="input-field" placeholder="e.g. 8"/>
+                </div>
+                <div className="form-group mb-6">
+                  <label>Choose Avatar</label>
+                  <div className="avatar-picker">
+                    {AVATARS.map(avatar => (
+                      <button key={avatar} type="button" onClick={() => setNewChildAvatar(avatar)} className={`avatar-btn ${newChildAvatar === avatar ? 'selected' : ''}`}>
+                        {avatar}
+                      </button>
                     ))}
                   </div>
                 </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? 'Adding...' : 'Add Child'}
-                  </button>
+                <div className="flex justify-end gap-3">
+                  <button type="button" className="btn-outline" onClick={() => setShowChildModal(false)}>Cancel</button>
+                  <button type="submit" className="btn-primary">Save Profile</button>
                 </div>
               </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }
