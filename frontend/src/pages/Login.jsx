@@ -48,7 +48,7 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label>Email Access</label>
+            <label>Email</label>
             <input 
               type="email" 
               required 

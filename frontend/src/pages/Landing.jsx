@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { FiShield, FiClock, FiMoon, FiStar, FiBarChart2, FiAlertCircle } from 'react-icons/fi';
+import { motion } from 'framer-motion';
 import './Landing.css';
 
 export default function Landing() {
@@ -34,7 +35,13 @@ export default function Landing() {
 
       <header className="hero">
         <div className="hero-content">
-          <h1>Keep Your Kids Safe Online</h1>
+          <motion.h1 
+            initial={{ opacity: 0, y: 30 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ duration: 0.6 }}
+          >
+            Keep Your Kids Safe Online
+          </motion.h1>
           <p>
             SafeWeb Jr monitors, protects and guides your child's internet experience — while keeping them informed and motivated.
           </p>

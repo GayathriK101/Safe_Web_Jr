@@ -66,6 +66,7 @@ function getActivityColor(type) {
     case 'CONTENT_FLAGGED': return 'badge-orange';
     case 'SITE_BLOCKED': return 'badge-red';
     case 'SEARCH_BLOCKED': return 'badge-red';
+    case 'TAMPER': return 'badge-orange';
     case 'PANIC': return 'badge-purple';
     default: return 'badge-gray';
   }
@@ -98,6 +99,7 @@ export default function ParentDashboard() {
 
   // Form States
   const [showChildModal, setShowChildModal] = useState(false);
+  const [dismissTamper, setDismissTamper] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [newChildAge, setNewChildAge] = useState('');
   const [newChildAvatar, setNewChildAvatar] = useState(AVATARS[0]);
@@ -246,8 +248,22 @@ export default function ParentDashboard() {
   };
 
   // Render Functions for Tabs
-  const renderOverview = () => (
+  const renderOverview = () => {
+    const recentTamper = activities.find(a => 
+      a.type === 'TAMPER' && 
+      (Date.now() - new Date(a.timestamp).getTime()) < 24 * 60 * 60 * 1000
+    );
+
+    return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
+      {recentTamper && !dismissTamper && (
+        <div style={{ background: '#FFFBEB', borderLeft: '4px solid #F59E0B', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+           <div>
+             <span style={{ fontWeight: 'bold', color: '#B45309' }}>⚠️ Warning:</span> SafeWeb Jr was disabled at {formatTime(recentTamper.timestamp)}. Please check your child's device.
+           </div>
+           <button onClick={() => setDismissTamper(true)} style={{ background: 'transparent', border: 'none', color: '#92400E', cursor: 'pointer', fontWeight: 'bold' }}>Dismiss</button>
+        </div>
+      )}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon emerald"><FiGlobe /></div>
@@ -326,7 +342,8 @@ export default function ParentDashboard() {
         </div>
       </div>
     </motion.div>
-  );
+    );
+  };
 
   const renderChildren = () => (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
@@ -434,7 +451,7 @@ export default function ParentDashboard() {
   };
 
   const renderAlerts = () => {
-    const alerts = activities.filter(a => ['SITE_BLOCKED', 'SEARCH_BLOCKED', 'CONTENT_FLAGGED', 'PANIC'].includes(a.type));
+    const alerts = activities.filter(a => ['SITE_BLOCKED', 'SEARCH_BLOCKED', 'CONTENT_FLAGGED', 'PANIC', 'TAMPER'].includes(a.type));
     
     return (
       <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
@@ -448,13 +465,17 @@ export default function ParentDashboard() {
         ) : (
           <div className="alerts-grid">
             {alerts.slice(0, 20).map((a, i) => (
-              <div key={i} className={`alert-card card ${a.type === 'PANIC' ? 'border-red alert-urgent' : ''}`} style={a.type === 'PANIC' ? { borderColor: '#EF4444', borderWidth: '2px' } : {}}>
+              <div key={i} className={`alert-card card ${a.type === 'PANIC' ? 'border-red alert-urgent' : ''}`} style={a.type === 'PANIC' ? { borderColor: '#EF4444', borderWidth: '2px' } : a.type === 'TAMPER' ? { borderColor: '#F59E0B', borderWidth: '2px' } : {}}>
                 <div className="alert-header">
-                  <span className={`badge ${getActivityColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
+                  {a.type === 'TAMPER' ? (
+                    <span className="badge badge-orange">⚠️ TAMPER ALERT</span>
+                  ) : (
+                    <span className={`badge ${getActivityColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
+                  )}
                   <span className="alert-time">{getTimeAgo(a.timestamp)}</span>
                 </div>
                 {a.type === 'PANIC' && <span className="urgent-badge" style={{color: '#EF4444', fontWeight: 'bold'}}>🚨 URGENT</span>}
-                <p className="alert-detail">{a.type === 'PANIC' ? 'Child pressed panic button from dashboard' : (a.domain || a.query || a.url || 'Unknown Action')}</p>
+                <p className="alert-detail">{a.type === 'PANIC' ? 'Child pressed panic button from dashboard' : a.type === 'TAMPER' ? "SafeWeb Jr extension was disabled on child's browser!" : (a.domain || a.query || a.url || 'Unknown Action')}</p>
                 <div className="alert-footer">
                   <span>{formatDate(a.timestamp)} at {formatTime(a.timestamp)}</span>
                 </div>
@@ -642,7 +663,6 @@ export default function ParentDashboard() {
         setLastGenerated(new Date());
       }
     } catch(e) {
-      console.error(e);
       showToast("Error generating summary");
     } finally {
       setIsGenerating(false);
@@ -712,7 +732,22 @@ export default function ParentDashboard() {
     }
   };
 
-  if (loading) return <div className="loading-screen">Loading SafeWeb Jr...</div>;
+  if (loading) return (
+    <div className="p-dashboard">
+       <aside className="p-sidebar">
+         <div className="p-sidebar-header"><FiShield className="brand-icon" /><span className="brand-text">SafeWeb Jr</span></div>
+         <nav className="p-sidebar-nav"><p className="nav-label">MENU</p></nav>
+       </aside>
+       <div className="p-main" style={{padding: '32px'}}>
+         <div className="skeleton-box" style={{height: 60, marginBottom: 24, borderRadius: 8}}></div>
+         <div style={{display: 'flex', gap: 24}}>
+           <div className="skeleton-box" style={{height: 120, flex: 1, borderRadius: 12}}></div>
+           <div className="skeleton-box" style={{height: 120, flex: 1, borderRadius: 12}}></div>
+           <div className="skeleton-box" style={{height: 120, flex: 1, borderRadius: 12}}></div>
+         </div>
+       </div>
+    </div>
+  );
 
   return (
     <div className="p-dashboard">
@@ -766,7 +801,7 @@ export default function ParentDashboard() {
             <h1 className="current-tab-title">{TABS.find(t => t.id === activeTab)?.label}</h1>
           </div>
           <div className="nav-right" style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
-            <span className="parent-greeting">Hi, {currentUser?.name || 'Parent'}</span>
+            <span className="parent-greeting">Hi, {currentUser?.displayName || 'Parent'} 👋</span>
             <button className="btn-outline" style={{padding: '8px 16px', borderRadius: '8px', color: '#4F46E5', border: '2px solid #4F46E5', background: 'transparent', fontWeight: 'bold', cursor: 'pointer'}} onClick={() => navigate('/kid/dashboard')}>
               👦 Kid View
             </button>

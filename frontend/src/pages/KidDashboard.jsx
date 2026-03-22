@@ -192,9 +192,9 @@ export default function KidDashboard() {
   if (flagsToday > 5) meterEmoji = "😐";
   if (flagsToday > 10) meterEmoji = "😔";
 
-  const getSiteColor = (idx) => {
-    const colors = ['bg-blue', 'bg-purple', 'bg-green', 'bg-pink'];
-    return colors[idx % colors.length];
+  const getSiteBorderColor = (idx) => {
+    const borders = ['border-blue', 'border-purple', 'border-green', 'border-pink'];
+    return borders[idx % borders.length];
   };
 
   return (
@@ -245,7 +245,14 @@ export default function KidDashboard() {
         <div className="kd-grid">
           {/* POINTS & LEVEL */}
           <motion.section initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} className="kd-card kd-level-card">
-            <h2>⭐ {points} Points</h2>
+            <motion.h2 
+              key={points} 
+              initial={{ textShadow: "0px 0px 0px rgba(245,158,11,0)" }}
+              animate={{ textShadow: ["0px 0px 15px rgba(245,158,11,0.8)", "0px 0px 0px rgba(245,158,11,0)"] }}
+              transition={{ duration: 1.5 }}
+            >
+              ⭐ {points} Points
+            </motion.h2>
             <div className="kd-level-header">
               <span className="kd-level-title">{levelName}</span>
               <span className="kd-progress-text">{Math.round(levelProgress)}% to next</span>
@@ -314,9 +321,9 @@ export default function KidDashboard() {
              {recommendedSites.length === 0 ? (
                <div className="kd-empty">Your parent hasn't added any sites yet! 😊</div>
              ) : (
-               <div className="kd-sites-grid">
+                 <div className="kd-sites-grid">
                  {recommendedSites.map((url, i) => (
-                   <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`kd-site-pill ${getSiteColor(i)}`}>
+                   <a key={i} href={url} target="_blank" rel="noopener noreferrer" className={`kd-site-pill ${getSiteBorderColor(i)}`}>
                      {new URL(url).hostname.replace('www.', '')}
                    </a>
                  ))}

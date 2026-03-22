@@ -174,12 +174,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Detect tampering if the extension is disabled
 chrome.management.onDisabled.addListener((info) => {
   if (info.id === chrome.runtime.id) {
-    const data = {
+    chrome.storage.local.set({ tamperEvent: { type: "TAMPER", timestamp: Date.now() } });
+    logActivityToFirestore({
       type: "TAMPER",
-      timestamp: Date.now()
-    };
-    chrome.storage.local.set({ tamperEvent: data });
-    logActivityToFirestore(data);
+      domain: "extension_disabled",
+      url: "extension_disabled",
+      urgent: true
+    });
   }
 });
 
