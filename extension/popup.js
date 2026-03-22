@@ -1,8 +1,43 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const todayStr = new Date().toDateString();
+  const setupView = document.getElementById('setup-view');
+  const mainView = document.getElementById('main-view');
+  const linkBtn = document.getElementById('link-btn');
+  const codeInput = document.getElementById('parent-code-input');
+  const errorMsg = document.getElementById('setup-error');
+  const successMsg = document.getElementById('setup-success');
 
-  chrome.storage.local.get(['sitesVisited', 'flagsToday', 'blockedToday', 'pointsEarned', 'lastResetDate', 'screenTimeToday', 'screenTimeLimit'], (result) => {
-    // Reset flags at midnight logic
+  chrome.storage.local.get(['parentId'], (res) => {
+    if (!res.parentId) {
+      setupView.style.display = 'block';
+    } else {
+      mainView.style.display = 'block';
+      loadMainView();
+    }
+  });
+
+  linkBtn.addEventListener('click', () => {
+    const code = codeInput.value.trim();
+    if (code.length === 8) {
+      chrome.storage.local.set({ parentId: code }, () => {
+        errorMsg.style.display = 'none';
+        successMsg.style.display = 'block';
+        setTimeout(() => {
+          setupView.style.display = 'none';
+          mainView.style.display = 'block';
+          loadMainView();
+        }, 1500);
+      });
+    } else {
+      errorMsg.textContent = "Code must be exactly 8 characters.";
+      errorMsg.style.display = 'block';
+    }
+  });
+
+  function loadMainView() {
+    const todayStr = new Date().toDateString();
+
+    chrome.storage.local.get(['sitesVisited', 'flagsToday', 'blockedToday', 'pointsEarned', 'lastResetDate', 'screenTimeToday', 'screenTimeLimit'], (result) => {
+      // Reset flags at midnight logic
     let currentFlags = result.flagsToday || 0;
     let currentBlocked = result.blockedToday || 0;
     
@@ -35,23 +70,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  const panicBtn = document.getElementById('panic-btn');
-  panicBtn.addEventListener('click', () => {
-    if (panicBtn.classList.contains('disabled')) return;
+    const panicBtn = document.getElementById('panic-btn');
+    panicBtn.addEventListener('click', () => {
+      if (panicBtn.classList.contains('disabled')) return;
 
-    const confirmed = confirm("Are you sure? This will alert your parent immediately.");
-    if (confirmed) {
-      chrome.runtime.sendMessage({ type: "PANIC" }, (response) => {
-        // Change button state
-        panicBtn.classList.add('disabled');
-        panicBtn.innerHTML = `
-          <span class="icon">✅</span>
-          <div class="panic-text">
-            <strong>Parent Alerted!</strong>
-            <span>Help is on the way.</span>
-          </div>
-        `;
-      });
-    }
-  });
+      const confirmed = confirm("Are you sure? This will alert your parent immediately.");
+      if (confirmed) {
+        chrome.runtime.sendMessage({ type: "PANIC" }, (response) => {
+          // Change button state
+          panicBtn.classList.add('disabled');
+          panicBtn.innerHTML = `
+            <span class="icon">✅</span>
+            <div class="panic-text">
+              <strong>Parent Alerted!</strong>
+              <span>Help is on the way.</span>
+            </div>
+          `;
+        });
+      }
+    });
+  }
 });

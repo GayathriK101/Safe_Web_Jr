@@ -1,9 +1,12 @@
 async function syncSettingsFromFirestore() {
   const projectId = "safeweb-jr";
   const apiKey = "AIzaSyB8o1SfL1x0jwPtpZXgCYnDSMNtLXQ5Dh4";
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/placeholder?key=${apiKey}`;
   
   try {
+    const storageRes = await chrome.storage.local.get(['parentId']);
+    const parentId = storageRes.parentId || "unlinked";
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/${parentId}?key=${apiKey}`;
+
     const response = await fetch(url);
     if (!response.ok) return;
     const data = await response.json();
@@ -59,6 +62,12 @@ async function logActivityToFirestore(data) {
   const projectId = "safeweb-jr";
   const apiKey = "AIzaSyB8o1SfL1x0jwPtpZXgCYnDSMNtLXQ5Dh4";
   
+  // Always get fresh parentId from storage
+  const stored = await chrome.storage.local.get(['parentId']);
+  const parentId = stored.parentId || "unlinked";
+  
+  console.log("Logging activity with parentId:", parentId);
+  
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/activity?key=${apiKey}`;
   
   try {
@@ -71,10 +80,9 @@ async function logActivityToFirestore(data) {
           url: {stringValue: data.url || ""},
           domain: {stringValue: data.domain || ""},
           query: {stringValue: data.query || ""},
+          parentId: {stringValue: parentId},
           childId: {stringValue: "placeholder"},
-          parentId: {stringValue: "placeholder"},
-          timestamp: {stringValue: new Date().toISOString()},
-          totalMinutes: {integerValue: (data.totalMinutes || 0).toString()}
+          timestamp: {stringValue: new Date().toISOString()}
         }
       })
     });
@@ -115,7 +123,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         url: tab.url,
         title: tab.title,
         timestamp: new Date().toISOString(),
-        childId: "placeholder"
+        childId: "unknown"
       };
       
       chrome.storage.local.set({ 
@@ -137,7 +145,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const panicData = {
       timestamp: new Date().toISOString(),
       type: "PANIC_ALERT",
-      childId: "placeholder"
+      childId: "unknown"
     };
     
     chrome.storage.local.set({ lastPanic: panicData });
