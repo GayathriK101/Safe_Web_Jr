@@ -1,0 +1,122 @@
+body {
+  width: 360px;
+  margin: 0;
+  padding: 16px;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #f9fafb;
+  color: #111827;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  color: #4F46E5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  color: #10B981;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.child-name {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.stats-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.stat-row:last-child {
+  margin-bottom: 0;
+}
+
+.panic-button {
+  width: 100%;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
+}
+
+.panic-button:hover {
+  background-color: #dc2626;
+}
+
+.panic-button.disabled {
+  background-color: #10B981;
+  cursor: default;
+  box-shadow: none;
+}
+
+.panic-button .icon {
+  font-size: 24px;
+}
+
+.panic-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.panic-text strong {
+  font-size: 16px;
+}
+
+.panic-text span {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #9ca3af;
+}
