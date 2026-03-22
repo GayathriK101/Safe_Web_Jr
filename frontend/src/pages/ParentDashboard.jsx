@@ -646,7 +646,7 @@ export default function ParentDashboard() {
 
       const childName = children.length > 0 ? children[0].name : "your child";
 
-      const res = await fetch('http://localhost:5000/api/reports/generate-summary', {
+      const res = await fetch('https://safeweb-jr-backend.onrender.com/api/reports/generate-summary', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({
