@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const todayStr = new Date().toDateString();
 
-  chrome.storage.local.get(['sitesVisited', 'flagsToday', 'blockedToday', 'pointsEarned', 'lastResetDate'], (result) => {
+  chrome.storage.local.get(['sitesVisited', 'flagsToday', 'blockedToday', 'pointsEarned', 'lastResetDate', 'screenTimeToday', 'screenTimeLimit'], (result) => {
     // Reset flags at midnight logic
     let currentFlags = result.flagsToday || 0;
     let currentBlocked = result.blockedToday || 0;
@@ -20,6 +20,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('flags-raised').textContent = currentFlags;
     document.getElementById('sites-blocked').textContent = currentBlocked;
     if (result.pointsEarned !== undefined) document.getElementById('points-earned').textContent = result.pointsEarned;
+    
+    const stToday = result.screenTimeToday || 0;
+    const stLimit = result.screenTimeLimit || 120;
+    const stDisplay = document.getElementById('screen-time-display');
+    if (stDisplay) {
+      if (stLimit - stToday > 0) {
+        stDisplay.textContent = `⏱ ${stToday} mins used`;
+      } else {
+        stDisplay.textContent = `⏱ ${stToday} mins used (Limit Reached)`;
+        stDisplay.style.color = "#ef4444";
+        stDisplay.style.fontWeight = "bold";
+      }
+    }
   });
 
   const panicBtn = document.getElementById('panic-btn');

@@ -1,6 +1,10 @@
 // SafeWeb Jr Content Filter
 console.log("SafeWeb Jr scanning: " + window.location.href);
 
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  throw new Error("SafeWeb Jr: Skipping localhost");
+}
+
 const BLOCKED_DOMAINS = [
   // Major adult video sites
   "pornhub.com", "xvideos.com", "xnxx.com", 
@@ -369,3 +373,39 @@ setTimeout(() => {
   }, 30000);
   
 }, 1000);
+
+// Screen Time & Bedtime Overlays
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "SCREEN_TIME_EXCEEDED") {
+    showOverlay(
+      "Screen Time Limit Reached!",
+      "You've used all your screen time for today.<br><br>Your limit was set by your parent.<br><br>Come back tomorrow! 🌟",
+      "⏰",
+      "#4F46E5"
+    );
+    document.querySelectorAll('a').forEach(a => { a.style.pointerEvents = 'none' });
+  } else if (message.type === "BEDTIME_LOCK") {
+    showOverlay(
+      "Bedtime Time!",
+      "It's past your bedtime. Time to rest!<br><br>See you tomorrow! Sweet dreams 💤",
+      "🌙",
+      "#1E1B4B"
+    );
+  }
+});
+
+function showOverlay(title, message, emoji, bgColor) {
+  if (document.getElementById('safeweb-overlay')) return;
+  const overlayHTML = `
+    <div id="safeweb-overlay" style="background-color: ${bgColor}; color: white; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999999999; font-family: sans-serif; text-align: center; padding: 20px; box-sizing: border-box;">
+      <div style="font-size: 100px; margin-bottom: 20px;">${emoji}</div>
+      <h1 style="color: white; font-size: 48px; margin: 0 0 20px 0;">${title}</h1>
+      <p style="font-size: 24px; max-width: 600px; margin: 0 0 20px 0; line-height: 1.5;">${message}</p>
+    </div>
+  `;
+  document.body.innerHTML = '';
+  document.body.style.margin = '0';
+  document.body.style.padding = '0';
+  document.body.style.overflow = 'hidden';
+  document.body.insertAdjacentHTML('afterbegin', overlayHTML);
+}
