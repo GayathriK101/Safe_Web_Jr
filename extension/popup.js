@@ -1,8 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Load stats from storage
-  chrome.storage.local.get(['sitesVisited', 'flagsRaised', 'pointsEarned'], (result) => {
+  const todayStr = new Date().toDateString();
+
+  chrome.storage.local.get(['sitesVisited', 'flagsToday', 'pointsEarned', 'lastResetDate'], (result) => {
+    // Reset flags at midnight logic
+    let currentFlags = result.flagsToday || 0;
+    
+    if (result.lastResetDate !== todayStr) {
+      currentFlags = 0;
+      chrome.storage.local.set({ 
+        flagsToday: 0, 
+        lastResetDate: todayStr 
+      });
+    }
+
     if (result.sitesVisited !== undefined) document.getElementById('sites-visited').textContent = result.sitesVisited;
-    if (result.flagsRaised !== undefined) document.getElementById('flags-raised').textContent = result.flagsRaised;
+    document.getElementById('flags-raised').textContent = currentFlags;
     if (result.pointsEarned !== undefined) document.getElementById('points-earned').textContent = result.pointsEarned;
   });
 
