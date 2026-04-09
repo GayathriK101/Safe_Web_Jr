@@ -385,11 +385,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     );
     document.querySelectorAll('a').forEach(a => { a.style.pointerEvents = 'none' });
   } else if (message.type === "BEDTIME_LOCK") {
-    showOverlay(
-      "Bedtime Time!",
-      "It's past your bedtime. Time to rest!<br><br>See you tomorrow! Sweet dreams 💤",
-      "🌙",
-      "#1E1B4B"
+    chrome.storage.local.get(
+      ['bedtimeEnabled', 'bedtimeHour', 'bedtimeLocked'],
+      (data) => {
+        const currentHour = new Date().getHours();
+        if (!data.bedtimeEnabled) return;
+        if (currentHour < data.bedtimeHour) return;
+        // Only show lock screen if actually past bedtime
+        showOverlay(
+          "Bedtime Time!",
+          "It's past your bedtime. Time to rest!<br><br>See you tomorrow! Sweet dreams 💤",
+          "🌙",
+          "#1E1B4B"
+        );
+      }
     );
   }
 });

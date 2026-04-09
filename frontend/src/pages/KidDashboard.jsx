@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { 
-  collection, query, orderBy, onSnapshot, getDocs,
+  collection, query, orderBy, onSnapshot, getDocs, getDoc, limit,
   updateDoc, doc, addDoc, setDoc, serverTimestamp, increment, where
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,10 +15,13 @@ export default function KidDashboard() {
   const navigate = useNavigate();
 
   const [child, setChild] = useState(null);
+  const childId = child?.id;
   const [activities, setActivities] = useState([]);
   const [rewards, setRewards] = useState([]);
   const [recommendedSites, setRecommendedSites] = useState([]);
   const [pointsHistory, setPointsHistory] = useState([]);
+  const [points, setPoints] = useState(0);
+  const [screenTimeUsed, setScreenTimeUsed] = useState(0);
   
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
@@ -61,54 +64,147 @@ export default function KidDashboard() {
     return () => { unsubChild(); unsubRewards(); unsubRec(); unsubActivity(); };
   }, [currentUser]);
 
-  // Handle Points calculation automatically on load / activity change
-  useEffect(() => {
-    if (!child || activities.length === 0) return;
-    
-    const calculatePoints = async () => {
-      let earnedPoints = 0;
-      let newHistory = [];
-      const parentId = currentUser.uid;
+  const isFirstActivityLoad = useRef(true);
 
-      for (let act of activities) {
-        // Only process activities that haven't been awarded points
-        if (!act.pointsAwarded && ['SITE_VISIT', 'CONTENT_FLAGGED', 'SITE_BLOCKED', 'SEARCH_BLOCKED'].includes(act.type)) {
-          let p = 0;
-          let reason = '';
-          if (act.type === 'SITE_VISIT') { p = 2; reason = 'Safe Site Visit'; }
-          if (act.type === 'CONTENT_FLAGGED') { p = -10; reason = 'Inappropriate Content'; }
-          if (act.type === 'SITE_BLOCKED') { p = -20; reason = 'Blocked Site Attempt'; }
-          if (act.type === 'SEARCH_BLOCKED') { p = -20; reason = 'Blocked Search Attempt'; }
-          
-          if (p !== 0) {
-            earnedPoints += p;
-            newHistory.push({ points: p, reason, timestamp: act.timestamp });
-            await updateDoc(doc(db, 'activity', act.id), { pointsAwarded: true });
+  useEffect(() => {
+    if (!currentUser || !childId) return;
+    
+    const childRef = doc(
+      db, 'users', currentUser.uid,
+      'children', childId
+    );
+    
+    let isFirstChildLoad = true;
+    
+    const unsubChild = onSnapshot(childRef,
+      async (snap) => {
+        if (snap.exists()) {
+          const currentPoints = snap.data().points || 0;
+          if (isFirstChildLoad && currentPoints > 500) {
+            await updateDoc(childRef, { points: 50 });
+          } else {
+            setPoints(Math.max(0, currentPoints));
           }
         }
+        isFirstChildLoad = false;
       }
-
-      if (earnedPoints !== 0) {
-        const finalPoints = Math.max(0, (child.points || 0) + earnedPoints);
-        await updateDoc(doc(db, `users/${parentId}/children`, child.id), { points: finalPoints });
-        
-        for (let entry of newHistory) {
-           await addDoc(collection(db, `users/${parentId}/children/${child.id}/pointsHistory`), entry);
+    );
+    
+    const q = query(
+      collection(db, 'activity'),
+      where('parentId', '==', currentUser.uid),
+      orderBy('timestamp', 'desc'),
+      limit(1)
+    );
+    
+    const unsubActivity = onSnapshot(q,
+      async (snapshot) => {
+        if (isFirstActivityLoad.current) {
+          isFirstActivityLoad.current = false;
+          return;
         }
+        if (snapshot.empty) return;
+        
+        const latest = snapshot.docs[0].data();
+        let pointChange = 0;
+        
+        if (latest.type === 'SITE_BLOCKED' ||
+            latest.type === 'SEARCH_BLOCKED') {
+          pointChange = -20;
+        } else if (
+            latest.type === 'CONTENT_FLAGGED') {
+          pointChange = -10;
+        } else if (latest.type === 'SITE_VISIT') {
+          pointChange = 2;
+        }
+        
+        if (pointChange === 0) return;
+        
+        const childSnap = await getDoc(childRef);
+        if (!childSnap.exists()) return;
+        
+        const current = childSnap.data().points || 0;
+        const newPoints = Math.max(
+          0, current + pointChange
+        );
+        
+        await updateDoc(childRef, {
+          points: newPoints
+        });
+        
+        await addDoc(
+          collection(
+            db, 'users', currentUser.uid,
+            'children', childId, 'pointsHistory'
+          ),
+          {
+            change: pointChange,
+            type: latest.type,
+            timestamp: serverTimestamp(),
+            label: pointChange > 0
+              ? 'Safe Site Visit'
+              : latest.type === 'SEARCH_BLOCKED'
+                ? 'Blocked Search'
+                : latest.type === 'SITE_BLOCKED'
+                  ? 'Blocked Site'
+                  : 'Flagged Content'
+          }
+        );
       }
+    );
+    
+    return () => {
+      unsubChild();
+      unsubActivity();
     };
-    calculatePoints();
-  }, [activities, child, currentUser]);
+  }, [currentUser, childId]);
 
-  // Fetch points history safely
+  // ISSUE 4 - Fix screen time showing 0 in kid dashboard
   useEffect(() => {
-    if (!child) return;
-    const qPH = query(collection(db, `users/${currentUser.uid}/children/${child.id}/pointsHistory`), orderBy('timestamp', 'desc'));
-    const unsubPH = onSnapshot(qPH, (snap) => {
-       setPointsHistory(snap.docs.map(d => d.data()));
+    if (!currentUser) return;
+    
+    const q = query(
+      collection(db, 'activity'),
+      where('parentId', '==', currentUser.uid),
+      where('type', '==', 'SCREEN_TIME_UPDATE'),
+      orderBy('timestamp', 'desc'),
+      limit(1)
+    );
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const data = snapshot.docs[0].data();
+        const mins = data.totalMinutes || 0;
+        setScreenTimeUsed(mins);
+      }
     });
-    return () => unsubPH();
-  }, [child, currentUser]);
+    
+    return () => unsub();
+  }, [currentUser]);
+
+  // ISSUE 5 - Fix recent points history display
+  useEffect(() => {
+    if (!currentUser || !childId) return;
+    
+    const q = query(
+      collection(
+        db, 'users', currentUser.uid,
+        'children', childId, 'pointsHistory'
+      ),
+      orderBy('timestamp', 'desc'),
+      limit(5)
+    );
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      const history = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      setPointsHistory(history);
+    });
+    
+    return () => unsub();
+  }, [currentUser, childId]);
 
   const handleLogout = async () => {
     try {
@@ -118,11 +214,11 @@ export default function KidDashboard() {
   };
 
   const redeemReward = async (reward) => {
-    if ((child.points || 0) < reward.cost) return;
+    if (points < reward.cost) return;
     
     if (window.confirm(`Are you sure you want to trade ${reward.cost} points for ${reward.title}?`)) {
-      const newPoints = child.points - reward.cost;
-      await updateDoc(doc(db, `users/${currentUser.uid}/children`, child.id), { points: newPoints });
+      const newPoints = Math.max(0, points - reward.cost);
+      await updateDoc(doc(db, `users/${currentUser.uid}/children`, childId), { points: newPoints });
       await addDoc(collection(db, `users/${currentUser.uid}/redemptions`), {
          childId: child.id,
          childName: child.name,
@@ -148,8 +244,7 @@ export default function KidDashboard() {
   }
 
   // Calculations
-  const latestST = activities.find(a => a.type === 'SCREEN_TIME_UPDATE');
-  const usedMins = latestST ? (latestST.totalMinutes || 0) : 0;
+  const usedMins = screenTimeUsed;
   const limitMins = child.screenTimeLimitMinutes || 120;
   const stPercent = Math.min((usedMins / limitMins) * 100, 100);
   
@@ -160,8 +255,6 @@ export default function KidDashboard() {
   const currentHour = new Date().getHours();
   const bHour = child.bedtimeHour || 21;
   const hoursToBedtime = bHour - currentHour;
-
-  const points = child.points || 0;
   let levelName = "Explorer 🌱"; 
   let nextLevelPoints = 50;
 
@@ -263,10 +356,10 @@ export default function KidDashboard() {
               <h4 className="text-sm text-gray-500 mb-2">Recent Points</h4>
               {points <= 0 && <p className="text-green text-sm mb-2" style={{fontWeight: 'bold'}}>Keep browsing safely to earn points! 🌟</p>}
               {pointsHistory.length === 0 ? <p className="text-muted text-sm">No points yet!</p> :
-                pointsHistory.slice(0, 5).map((ph, idx) => (
+                pointsHistory.map((ph, idx) => (
                   <div key={idx} className="kd-history-item">
-                    <span>{ph.reason}</span>
-                    <span className={ph.points > 0 ? 'text-green' : 'text-red'}>{ph.points > 0 ? '+'+ph.points : ph.points}</span>
+                    <span>{ph.label}</span>
+                    <span className={ph.change > 0 ? 'text-green' : 'text-red'}>{ph.change > 0 ? '+'+ph.change : ph.change}</span>
                   </div>
                 ))
               }

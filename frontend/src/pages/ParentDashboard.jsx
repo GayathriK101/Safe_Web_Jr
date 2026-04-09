@@ -91,6 +91,7 @@ export default function ParentDashboard() {
   const [recommendedSites, setRecommendedSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [screenTimeUsed, setScreenTimeUsed] = useState(0);
 
   // Report States
   const [summary, setSummary] = useState("");
@@ -100,6 +101,7 @@ export default function ParentDashboard() {
 
   // Form States
   const [showChildModal, setShowChildModal] = useState(false);
+  const [childToDelete, setChildToDelete] = useState(null);
   const [dismissTamper, setDismissTamper] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [newChildAge, setNewChildAge] = useState('');
@@ -117,6 +119,7 @@ export default function ParentDashboard() {
     let unsubChildren = () => {};
     let unsubActivity = () => {};
     let unsubRec = () => {};
+    let unsubScreenTime = () => {};
 
     const fallbackTimer = setTimeout(() => {
       setLoading(false);
@@ -168,6 +171,29 @@ export default function ParentDashboard() {
       } catch (e) {
         console.error("Try/Catch Error (recommended sites query):", e.message || e);
       }
+
+      try {
+        const qScreenTime = query(
+          collection(db, 'activity'),
+          where('parentId', '==', currentUser.uid),
+          where('type', '==', 'SCREEN_TIME_UPDATE'),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        unsubScreenTime = onSnapshot(qScreenTime, (snapshot) => {
+          if (!snapshot.empty) {
+            const latest = snapshot.docs[0].data();
+            const mins = latest.totalMinutes || 
+                         parseInt(latest.fields?.totalMinutes?.integerValue) || 
+                         0;
+            setScreenTimeUsed(mins);
+          } else {
+            setScreenTimeUsed(0);
+          }
+        });
+      } catch (e) {
+        console.error("Try/Catch Error (screen time query):", e.message || e);
+      }
     } catch (err) {
       console.error("Firestore Setup Error:", err.message || err, err);
       setLoading(false);
@@ -178,6 +204,7 @@ export default function ParentDashboard() {
       unsubChildren(); 
       unsubActivity(); 
       unsubRec(); 
+      unsubScreenTime();
     };
   }, [currentUser]);
 
@@ -190,21 +217,46 @@ export default function ParentDashboard() {
     }
   };
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const [activityStats, setActivityStats] = useState({ visited: 0, flags: 0, blocked: 0 });
 
-  const todayActivities = useMemo(() => {
-    return activities.filter(a => a.timestamp >= todayStart.getTime());
-  }, [activities, todayStart]);
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const todayIso = today.toISOString();
+    
+    try {
+      const qStats = query(
+        collection(db, 'activity'),
+        where('parentId', '==', currentUser.uid),
+        where('timestamp', '>=', todayIso)
+      );
+      
+      const unsubStats = onSnapshot(qStats, (snap) => {
+        let visited = 0;
+        let flags = 0;
+        let blocked = 0;
+        
+        snap.docs.forEach(d => {
+          const type = d.data().type;
+          if (type === 'SITE_VISIT') visited++;
+          if (type === 'CONTENT_FLAGGED') flags++;
+          if (type === 'SITE_BLOCKED' || type === 'SEARCH_BLOCKED') blocked++;
+        });
+        
+        setActivityStats({ visited, flags, blocked });
+      });
+      
+      return () => unsubStats();
+    } catch (err) {
+      console.error("Stats query error:", err);
+    }
+  }, [currentUser]);
 
-  const stats = useMemo(() => {
-    return {
-      visited: todayActivities.filter(a => a.type === 'SITE_VISIT').length,
-      flags: todayActivities.filter(a => a.type === 'CONTENT_FLAGGED').length,
-      blocked: todayActivities.filter(a => ['SITE_BLOCKED', 'SEARCH_BLOCKED'].includes(a.type)).length,
-      points: children.reduce((sum, c) => sum + (c.points || 0), 0)
-    };
-  }, [todayActivities, children]);
+  const totalPoints = useMemo(() => {
+    return children.reduce((sum, c) => sum + (c.points || 0), 0);
+  }, [children]);
 
   // Handle Add Child
   const handleAddChild = async (e) => {
@@ -229,6 +281,19 @@ export default function ParentDashboard() {
     }
   };
 
+  // Handle Delete Child
+  const handleDeleteChild = async () => {
+    if (!childToDelete) return;
+    try {
+      await deleteDoc(doc(db, `users/${currentUser.uid}/children`, childToDelete.id));
+      showToast("Child removed successfully");
+      setChildToDelete(null);
+    } catch (err) {
+      console.error(err);
+      showToast("Error removing child");
+    }
+  };
+
   // Handle Recommended Site Add
   const handleAddRecSite = async (e) => {
     e.preventDefault();
@@ -245,6 +310,7 @@ export default function ParentDashboard() {
       await setDoc(doc(db, 'settings', currentUser.uid), {
         recommendedSites: newSites.map(s => s.url)
       }, { merge: true });
+      try { await deleteDoc(doc(db, 'settings', 'placeholder')); } catch(e) {}
       showToast("Recommended site added! 🌐");
       
       setNewRecSiteName('');
@@ -265,6 +331,7 @@ export default function ParentDashboard() {
         await setDoc(doc(db, 'settings', currentUser.uid), {
           recommendedSites: newSites.map(s => s.url)
         }, { merge: true });
+        try { await deleteDoc(doc(db, 'settings', 'placeholder')); } catch(e) {}
         showToast("Recommended site removed! 🗑️");
       }
     } catch (err) {
@@ -283,6 +350,7 @@ export default function ParentDashboard() {
         await setDoc(doc(db, 'settings', currentUser.uid), {
           screenTimeLimit: value
         }, { merge: true });
+        try { await deleteDoc(doc(db, 'settings', 'placeholder')); } catch(e) {}
         showToast("Screen time limit updated! ⏱️");
       }
       if (field === 'bedtimeHour') {
@@ -290,6 +358,7 @@ export default function ParentDashboard() {
           bedtimeHour: value,
           bedtimeEnabled: true
         }, { merge: true });
+        try { await deleteDoc(doc(db, 'settings', 'placeholder')); } catch(e) {}
         showToast("Bedtime updated! 🌙");
       }
     } catch (err) {
@@ -334,28 +403,28 @@ export default function ParentDashboard() {
           <div className="stat-icon emerald"><FiGlobe /></div>
           <div className="stat-info">
             <p className="stat-label">Sites Visited Today</p>
-            <h3 className="stat-value">{stats.visited}</h3>
+            <h3 className="stat-value">{activityStats.visited}</h3>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon orange"><FiAlertTriangle /></div>
           <div className="stat-info">
             <p className="stat-label">Flags Raised Today</p>
-            <h3 className="stat-value">{stats.flags}</h3>
+            <h3 className="stat-value">{activityStats.flags}</h3>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon red"><FiShield /></div>
           <div className="stat-info">
             <p className="stat-label">Sites Blocked Today</p>
-            <h3 className="stat-value">{stats.blocked}</h3>
+            <h3 className="stat-value">{activityStats.blocked}</h3>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon indigo"><FiCheckCircle /></div>
           <div className="stat-info">
             <p className="stat-label">Total Points</p>
-            <h3 className="stat-value">{stats.points}</h3>
+            <h3 className="stat-value">{totalPoints}</h3>
           </div>
         </div>
       </div>
@@ -429,7 +498,15 @@ export default function ParentDashboard() {
       ) : (
         <div className="children-grid">
           {children.map(c => (
-            <div key={c.id} className="child-card card">
+            <div key={c.id} className="child-card card" style={{ position: 'relative' }}>
+               <button 
+                 onClick={() => setChildToDelete(c)}
+                 className="btn-icon text-red" 
+                 style={{ position: 'absolute', top: '12px', right: '12px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '18px' }}
+                 title="Delete Child"
+               >
+                 <FiTrash2 />
+               </button>
                <div className="child-avatar-lg">{c.avatar}</div>
                <h3>{c.name}</h3>
                <p className="child-age">Age {c.age}</p>
@@ -553,10 +630,6 @@ export default function ParentDashboard() {
   };
 
   const renderScreenTime = () => {
-    const latestST = activities.find(a => a.type === 'SCREEN_TIME_UPDATE');
-    // Align with firestore structural requirements for totalMinutes
-    const totalMinutes = latestST ? latestST.totalMinutes || 0 : 0;
-            
     return (
       <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="tab-pane">
         <h2 className="mb-4">⏱ Screen Time Limits</h2>
@@ -566,7 +639,7 @@ export default function ParentDashboard() {
           <div className="screen-time-list">
             {children.map(c => {
               const screenTimeLimit = c.screenTimeLimitMinutes || 120;
-              const percent = Math.min((totalMinutes / screenTimeLimit) * 100, 100);
+              const percent = Math.min((screenTimeUsed / screenTimeLimit) * 100, 100);
               const isDanger = percent >= 80;
               const isWarning = percent >= 60 && percent < 80;
               const barColor = isDanger ? 'bg-red' : (isWarning ? 'bg-yellow' : 'bg-emerald');
@@ -596,7 +669,7 @@ export default function ParentDashboard() {
                       ></div>
                     </div>
                     <div className="st-progress-labels">
-                      <span>{totalMinutes} mins used {percent >= 100 && <span className="badge badge-red ml-2">LIMIT REACHED</span>}</span>
+                      <span>{screenTimeUsed} mins used {percent >= 100 && <span className="badge badge-red ml-2">LIMIT REACHED</span>}</span>
                       <span>{screenTimeLimit} mins limit</span>
                     </div>
                   </div>
@@ -694,41 +767,59 @@ export default function ParentDashboard() {
     </motion.div>
   );
 
-  const handleGenerateSummary = async () => {
+  const generateSummary = async () => {
     setIsGenerating(true);
     try {
-      const qActivity = query(collection(db, 'activity'), where('parentId', '==', currentUser.uid), orderBy('timestamp', 'desc'), limit(200));
-      const snap = await getDocs(qActivity);
-      const acts = snap.docs.map(d => d.data());
+      const backendUrl = window.location.hostname === 'localhost'
+        ? 'http://localhost:5000'
+        : 'https://safeweb-jr-backend.onrender.com';
       
+      // Get last 7 days activity
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
-      const recentActs = acts.filter(a => {
-        const d = new Date(a.timestamp);
-        return d >= sevenDaysAgo;
-      });
-
-      const childName = children.length > 0 ? children[0].name : "your child";
-
-      const res = await fetch('https://safeweb-jr-backend.onrender.com/api/reports/generate-summary', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({
-           activityData: recentActs,
-           childName,
-           weekStart: sevenDaysAgo.toDateString()
-         })
-      });
-      const data = await res.json();
+      const activityQuery = query(
+        collection(db, 'activity'),
+        where('parentId', '==', currentUser.uid),
+        orderBy('timestamp', 'desc'),
+        limit(200)
+      );
       
-      if (data.summary) {
-        setSummary(data.summary);
-        setReportStats(data.stats);
-        setLastGenerated(new Date());
+      const snapshot = await getDocs(activityQuery);
+      const activityData = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      
+      const childName = children.length > 0 
+        ? children[0].name 
+        : 'Your Child';
+      
+      const response = await fetch(
+        `${backendUrl}/api/reports/generate-summary`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            activityData,
+            childName,
+            weekStart: sevenDaysAgo.toISOString()
+          })
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
-    } catch(e) {
-      showToast("Error generating summary");
+      
+      const result = await response.json();
+      setSummary(result.summary);
+      setReportStats(result.stats);
+      setLastGenerated(new Date());
+      
+    } catch(error) {
+      console.error('Summary error:', error);
+      setSummary('Failed to generate summary. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -744,7 +835,7 @@ export default function ParentDashboard() {
           </div>
           <button 
             className="btn-primary" 
-            onClick={handleGenerateSummary} 
+            onClick={generateSummary} 
             disabled={isGenerating}
             style={{background: '#4F46E5', opacity: isGenerating ? 0.7 : 1}}
           >
@@ -770,7 +861,7 @@ export default function ParentDashboard() {
             </div>
 
             <div className="flex gap-4 mt-6" style={{display: 'flex', gap: '16px', marginTop: '24px'}}>
-              <button className="btn-outline flex-1" style={{flex: 1, color: '#4F46E5', borderColor: '#4F46E5', background: 'transparent'}} onClick={handleGenerateSummary} disabled={isGenerating}>🔄 Regenerate</button>
+              <button className="btn-outline flex-1" style={{flex: 1, color: '#4F46E5', borderColor: '#4F46E5', background: 'transparent'}} onClick={generateSummary} disabled={isGenerating}>🔄 Regenerate</button>
             </div>
           </motion.div>
         ) : (
@@ -926,6 +1017,22 @@ export default function ParentDashboard() {
                   <button type="submit" className="btn-primary">Save Profile</button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal for Delete Child */}
+      <AnimatePresence>
+        {childToDelete && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setChildToDelete(null)}>
+            <motion.div initial={{scale:0.95, y:20}} animate={{scale:1, y:0}} exit={{scale:0.95, y:20}} className="modal-box" style={{textAlign: 'center'}}>
+              <h2 style={{color: '#EF4444', marginBottom: '16px'}}>Delete {childToDelete.name}?</h2>
+              <p className="text-muted mb-6">Are you sure you want to delete {childToDelete.name}? This cannot be undone.</p>
+              <div className="flex justify-center gap-3" style={{display: 'flex', justifyContent: 'center', gap: '12px'}}>
+                <button type="button" className="btn-outline" onClick={() => setChildToDelete(null)}>Cancel</button>
+                <button type="button" className="btn-primary" style={{backgroundColor: '#EF4444', borderColor: '#EF4444'}} onClick={handleDeleteChild}><FiTrash2 style={{marginRight: '8px', display: 'inline-block'}}/> Delete</button>
+              </div>
             </motion.div>
           </motion.div>
         )}

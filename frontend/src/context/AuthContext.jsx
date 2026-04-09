@@ -30,11 +30,38 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString()
     });
     
+    // Auto create default settings
+    await setDoc(doc(db, 'settings', user.uid), {
+      bedtimeEnabled: true,
+      bedtimeHour: 21,
+      screenTimeLimit: 120,
+      recommendedSites: [],
+      createdAt: new Date().toISOString()
+    });
+    
     return userCredential;
   }
 
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+  async function login(email, password) {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    const settingsRef = doc(db, 'settings', user.uid);
+    const settingsSnap = await getDoc(settingsRef);
+
+    if (!settingsSnap.exists()) {
+      // Create default settings if missing
+      await setDoc(settingsRef, {
+        bedtimeEnabled: true,
+        bedtimeHour: 21,
+        screenTimeLimit: 120,
+        recommendedSites: [],
+        createdAt: new Date().toISOString()
+      });
+      console.log("Created missing settings for:", user.uid);
+    }
+    
+    return userCredential;
   }
 
   function logout() {

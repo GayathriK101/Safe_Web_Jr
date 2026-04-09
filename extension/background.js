@@ -1,32 +1,59 @@
 async function syncSettingsFromFirestore() {
+  const stored = await chrome.storage.local.get(
+    ['parentId']
+  );
+  const parentId = stored.parentId;
+  
+  if (!parentId || parentId === 'unlinked' || 
+      parentId === 'placeholder') {
+    console.log("No valid parentId, skipping sync");
+    return;
+  }
+  
   const projectId = "safeweb-jr";
   const apiKey = "AIzaSyB8o1SfL1x0jwPtpZXgCYnDSMNtLXQ5Dh4";
   
   try {
-    const storageRes = await chrome.storage.local.get(['parentId']);
-    const parentId = storageRes.parentId || "unlinked";
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/${parentId}?key=${apiKey}`;
-
-    const response = await fetch(url);
-    if (!response.ok) return;
+    const response = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/settings/${parentId}?key=${apiKey}`
+    );
     const data = await response.json();
-    if (data && data.fields) {
-      const screenTimeLimit = data.fields.screenTimeLimit ? Number(data.fields.screenTimeLimit.integerValue || data.fields.screenTimeLimit.doubleValue || 120) : 120;
-      const bedtimeHour = data.fields.bedtimeHour ? Number(data.fields.bedtimeHour.integerValue || data.fields.bedtimeHour.doubleValue || 21) : 21;
-      const bedtimeEnabled = data.fields.bedtimeEnabled ? data.fields.bedtimeEnabled.booleanValue : true;
-      const safeYouTubeEnabled = data.fields.safeYouTubeEnabled ? data.fields.safeYouTubeEnabled.booleanValue : true;
-      
-      chrome.storage.local.set({
-        screenTimeLimit,
-        bedtimeHour,
-        bedtimeEnabled,
-        safeYouTubeEnabled
-      }, () => {
-        checkBedtime();
-      });
+    
+    if (!data.fields) {
+      console.log("No settings found for:", parentId);
+      return;
     }
+    
+    const fields = data.fields;
+    const bedtimeHour = parseInt(
+      fields?.bedtimeHour?.integerValue ||
+      fields?.bedtimeHour?.doubleValue || 21
+    );
+    const bedtimeEnabled =
+      fields?.bedtimeEnabled?.booleanValue !== undefined
+        ? fields.bedtimeEnabled.booleanValue
+        : true;
+    const screenTimeLimit = parseInt(
+      fields?.screenTimeLimit?.integerValue ||
+      fields?.screenTimeLimit?.doubleValue ||
+      fields?.screentimelimit?.integerValue ||
+      fields?.screentimelimit?.doubleValue ||
+      fields?.ScreenTimeLimit?.integerValue ||
+      fields?.ScreenTimeLimit?.doubleValue ||
+      120
+    );
+    
+    console.log("Synced settings:", 
+      { bedtimeHour, bedtimeEnabled, screenTimeLimit });
+    
+    await chrome.storage.local.set({
+      bedtimeHour,
+      bedtimeEnabled,
+      screenTimeLimit
+    });
+    
   } catch(e) {
-    console.log("Sync failed silently", e);
+    console.log("Sync failed:", e.message);
   }
 }
 
@@ -35,26 +62,36 @@ async function checkBedtime() {
     bedtimeHour: 21,
     bedtimeEnabled: true
   });
+  
+  if (!data.bedtimeEnabled) {
+    console.log("Bedtime disabled, skipping check");
+    return;
+  }
+  
   const currentHour = new Date().getHours();
+  if (currentHour < data.bedtimeHour) {
+    // Clear any existing bedtime lock
+    chrome.storage.local.set({ bedtimeLocked: false });
+    return;
+  }
+  
   console.log("Bedtime check:", currentHour, 
     ">=", data.bedtimeHour, 
     "enabled:", data.bedtimeEnabled);
-  if (data.bedtimeEnabled && 
-      (currentHour >= data.bedtimeHour || currentHour < 6)) {
-    chrome.storage.local.set({bedtimeLocked: true});
+  
+  if (currentHour >= data.bedtimeHour) {
     chrome.tabs.query({}, function(tabs) {
       tabs.forEach(tab => {
         if (tab.id && tab.url && 
             !tab.url.startsWith('chrome://') &&
-            !tab.url.startsWith('chrome-extension://')) {
+            !tab.url.startsWith('chrome-extension://') &&
+            !tab.url.includes('localhost')) {
           chrome.tabs.sendMessage(tab.id, 
             {type: "BEDTIME_LOCK"})
             .catch(e => {});
         }
       });
     });
-  } else {
-    chrome.storage.local.set({bedtimeLocked: false});
   }
 }
 
@@ -104,7 +141,7 @@ chrome.runtime.onInstalled.addListener(() => {
   syncSettingsFromFirestore();
 });
 
-chrome.alarms.create("syncSettings", { periodInMinutes: 5 });
+chrome.alarms.create("syncSettings", { periodInMinutes: 2 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
